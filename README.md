@@ -59,3 +59,20 @@ Rules:
   backoff on HTTP 429, keeping last-known values.
 - Banked resets are display-only with a button that opens the provider's
   usage page for manual confirmation. Nothing is ever redeemed automatically.
+
+## Shell quirks found while building (Dux 2.1.1)
+
+- `PluginGlobalVar` lives in `qs.Widgets`, not `qs.Modules.Plugins` (docs say
+  the latter).
+- On the default island bar, center widgets are replaced by island
+  activities: a bar pill only renders in the left/right sections. Verify the
+  pill there.
+- Plugin `.js` libraries and shared `.qml` includes are cached from shell
+  startup and ignore `plugins reload`; only manifest components hot-reload.
+  This plugin therefore inlines its formatting helpers per surface (the
+  threshold rules stay in one tested place: `collectors/model.py`).
+- The overview card slot injects `pluginId`/`pluginService` only once at
+  load, which can race; the card reads the singletons directly instead.
+- External edits to `plugin_settings.json` are not re-parsed live (no
+  `onFileChanged` handler upstream). Change settings via Settings → Plugins
+  UI; hand edits apply after a shell restart.
