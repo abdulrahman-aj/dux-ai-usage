@@ -24,9 +24,7 @@ DashCardComponent {
 
     readonly property real warnAt: cardSettings.warnThreshold ?? 80
     readonly property real critAt: cardSettings.critThreshold ?? 100
-    readonly property bool showClaude: cardSettings.enableClaude ?? true
-    readonly property bool showCodex: cardSettings.enableCodex ?? true
-    readonly property bool showGo: cardSettings.enableGo ?? true
+    readonly property var tc: u.clampedThresholds(root.warnAt, root.critAt)
 
     AiUsageShared {
         id: u
@@ -42,9 +40,13 @@ DashCardComponent {
         }
     }
 
-    readonly property var providers: {
-        var all = snapshot?.providers ?? [];
-        return all.filter(p => (p.id === "claude" && root.showClaude) || (p.id === "codex" && root.showCodex) || (p.id === "opencodeGo" && root.showGo));
+    readonly property var providers: u.visibleProviders(root.snapshot, root.cardSettings)
+
+    // Shrink the glance entries on narrow cards so three providers fit
+    // the minimum card instead of clipping at its edges.
+    readonly property real entryScale: {
+        var n = Math.max(1, root.providers.length);
+        return Math.max(0.62, Math.min(1, root.width / (n * 118)));
     }
 
     Row {
@@ -55,21 +57,21 @@ DashCardComponent {
             model: root.providers
             delegate: Row {
                 property var provider: modelData
-                readonly property var headline: u.headlineWindow(provider, root.warnAt, root.critAt)
-                readonly property string level: u.headlineLevel(provider, root.warnAt, root.critAt)
+                readonly property var headline: u.headlineWindow(provider, root.tc[0], root.tc[1])
+                readonly property string level: u.headlineLevel(provider, root.tc[0], root.tc[1])
 
                 spacing: Theme.spacingXS
 
                 DSVGIcon {
                     source: u.logoFor(provider?.id)
-                    size: 18
+                    size: Math.round(18 * root.entryScale)
                     colorOverride: u.stateColor(level)
                     anchors.verticalCenter: parent.verticalCenter
                 }
 
                 StyledText {
                     text: provider?.error ? "–" : u.pctText(headline?.usedPercent)
-                    font.pixelSize: Theme.fontSizeLarge
+                    font.pixelSize: Math.round(Theme.fontSizeLarge * root.entryScale)
                     font.weight: Theme.fontWeightMedium
                     color: u.stateColor(level)
                     anchors.verticalCenter: parent.verticalCenter
@@ -78,7 +80,7 @@ DashCardComponent {
                 StyledText {
                     visible: u.isShortTakeover(provider) && !provider?.error
                     text: u.shortMark(headline?.id)
-                    font.pixelSize: Theme.fontSizeSmall
+                    font.pixelSize: Math.round(Theme.fontSizeSmall * root.entryScale)
                     color: u.stateColor(level)
                     opacity: 0.85
                     anchors.top: parent.top

@@ -190,6 +190,15 @@ def compute_events(
 
     for key in [k for k in notified if k.split("/")[0] in disabled]:
         del notified[key]
+    # Forget windows that no longer exist (e.g. a scoped row filtered
+    # out at 0%): a reappearing window refires by level, like a re-arm.
+    current_keys = {
+        provider_id + "/" + window_id
+        for provider_id, windows in curr.items()
+        for window_id in windows
+    }
+    for key in [k for k in notified if k not in current_keys]:
+        del notified[key]
     return events, notified
 
 

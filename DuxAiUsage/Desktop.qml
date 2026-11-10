@@ -23,9 +23,6 @@ DesktopPluginComponent {
 
     readonly property real warnAt: pluginData.warnThreshold ?? 80
     readonly property real critAt: pluginData.critThreshold ?? 100
-    readonly property bool showClaude: pluginData.enableClaude ?? true
-    readonly property bool showCodex: pluginData.enableCodex ?? true
-    readonly property bool showGo: pluginData.enableGo ?? true
 
     AiUsageShared {
         id: u
@@ -38,10 +35,7 @@ DesktopPluginComponent {
     }
 
     readonly property var snapshot: snapshotVar.value
-    readonly property var providers: {
-        var all = snapshot?.providers ?? [];
-        return all.filter(p => (p.id === "claude" && root.showClaude) || (p.id === "codex" && root.showCodex) || (p.id === "opencodeGo" && root.showGo));
-    }
+    readonly property var providers: u.visibleProviders(root.snapshot, root.pluginData)
 
     Rectangle {
         anchors.fill: parent
@@ -50,57 +44,67 @@ DesktopPluginComponent {
         opacity: 0.92
     }
 
-    Column {
+    // Content scrolls inside the fixed rectangle (clipped) so a small
+    // default size never paints cards onto the desktop.
+    Flickable {
         anchors.fill: parent
         anchors.margins: Theme.spacingM
-        spacing: Theme.spacingS
+        clip: true
+        contentWidth: width
+        contentHeight: body.implicitHeight
 
-        Row {
+        Column {
+            id: body
             width: parent.width
             spacing: Theme.spacingS
 
-            StyledText {
-                text: "AI Usage"
-                font.pixelSize: Theme.fontSizeMedium
-                font.weight: Theme.fontWeightMedium
-                color: Theme.surfaceText
-                anchors.verticalCenter: parent.verticalCenter
-            }
+            Row {
+                width: parent.width
+                spacing: Theme.spacingS
 
-            StyledText {
-                text: u.updatedText(root.snapshot?.fetchedAt, root.nowMs)
-                font.pixelSize: Theme.fontSizeSmall
-                color: Theme.surfaceVariantText
-                anchors.verticalCenter: parent.verticalCenter
-            }
-        }
+                StyledText {
+                    text: "AI Usage"
+                    font.pixelSize: Theme.fontSizeMedium
+                    font.weight: Theme.fontWeightMedium
+                    color: Theme.surfaceText
+                    anchors.verticalCenter: parent.verticalCenter
+                }
 
-        Flow {
-            id: cardFlow
-            width: parent.width
-            spacing: Theme.spacingS
-
-            readonly property int cols: width < 380 ? 1 : 2
-            readonly property real cardWidth: (width - (cols - 1) * spacing) / cols
-
-            Repeater {
-                model: root.providers
-                delegate: ProviderCard {
-                    width: cardFlow.cardWidth
-                    provider: modelData
-                    nowMs: root.nowMs
-                    fetchedAt: root.snapshot?.fetchedAt ?? ""
-                    warnAt: root.warnAt
-                    critAt: root.critAt
+                StyledText {
+                    text: u.updatedText(root.snapshot?.fetchedAt, root.nowMs)
+                    font.pixelSize: Theme.fontSizeSmall
+                    color: Theme.surfaceVariantText
+                    anchors.verticalCenter: parent.verticalCenter
                 }
             }
-        }
 
-        StyledText {
-            visible: root.providers.length === 0
-            text: "Waiting for first poll…"
-            font.pixelSize: Theme.fontSizeSmall
-            color: Theme.surfaceVariantText
+            Flow {
+                id: cardFlow
+                width: parent.width
+                spacing: Theme.spacingS
+
+                readonly property int cols: width < 380 ? 1 : 2
+                readonly property real cardWidth: (width - (cols - 1) * spacing) / cols
+
+                Repeater {
+                    model: root.providers
+                    delegate: ProviderCard {
+                        width: cardFlow.cardWidth
+                        provider: modelData
+                        nowMs: root.nowMs
+                        fetchedAt: root.snapshot?.fetchedAt ?? ""
+                        warnAt: root.warnAt
+                        critAt: root.critAt
+                    }
+                }
+            }
+
+            StyledText {
+                visible: root.providers.length === 0
+                text: root.snapshot ? "All providers are disabled in settings." : "Waiting for the first poll (up to a few minutes after enabling)…"
+                font.pixelSize: Theme.fontSizeSmall
+                color: Theme.surfaceVariantText
+            }
         }
     }
 }

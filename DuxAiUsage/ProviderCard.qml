@@ -20,9 +20,10 @@ StyledRect {
         id: u
     }
 
-    readonly property var headline: u.headlineWindow(root.provider, root.warnAt, root.critAt)
-    readonly property string headlineLevel: u.headlineLevel(root.provider, root.warnAt, root.critAt)
+    readonly property var headline: u.headlineWindow(root.provider, tc[0], tc[1])
+    readonly property string headlineLevel: u.headlineLevel(root.provider, tc[0], tc[1])
     readonly property color headlineColor: u.stateColor(root.headlineLevel)
+    readonly property var tc: u.clampedThresholds(root.warnAt, root.critAt)
 
     color: Theme.cardSurface ?? Theme.surfaceContainerHigh
     radius: Theme.cornerRadius
@@ -133,8 +134,8 @@ StyledRect {
                 width: parent.width
                 win: modelData
                 nowMs: root.nowMs
-                warnAt: root.warnAt
-                critAt: root.critAt
+                warnAt: root.tc[0]
+                critAt: root.tc[1]
             }
         }
 

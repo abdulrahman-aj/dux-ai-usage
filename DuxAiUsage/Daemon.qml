@@ -163,29 +163,16 @@ PluginComponent {
         if (!resetsAt)
             return "soon";
         try {
-            return "in " + countdown(resetsAt);
+            return "in " + shared.countdown(resetsAt);
         } catch (e) {
             return "soon";
         }
     }
 
-    // Inline formatting helpers (see Widget.qml): the shell caches shared
-    // QML includes, so per-surface helpers live in each surface.
-    function countdown(resetsAt, nowMs) {
-        if (!resetsAt)
-            return "";
-        var ms = new Date(resetsAt).getTime() - (nowMs ?? Date.now());
-        if (!(ms > 0))
-            return "soon";
-        var mins = Math.ceil(ms / 60000);
-        if (mins < 60)
-            return mins + "m";
-        var hours = Math.floor(mins / 60);
-        var rest = mins - hours * 60;
-        if (hours < 48)
-            return rest === 0 ? hours + "h" : hours + "h " + rest + "m";
-        var days = Math.floor(hours / 24);
-        return days + "d " + (hours - days * 24) + "h";
+    // Countdown text comes from the same shared helper every surface
+    // uses.
+    AiUsageShared {
+        id: shared
     }
 
     Timer {

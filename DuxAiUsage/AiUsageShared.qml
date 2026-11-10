@@ -23,6 +23,29 @@ QtObject {
         return "weekly";
     }
 
+    // Clamp the two threshold sliders the same way model.py does, so a
+    // pill can never color crit while the daemon toasts warn (or take
+    // over a different headline): every surface derives its levels
+    // from these, never from the raw settings.
+    function clampedThresholds(warn, crit) {
+        if (!(warn >= 0))
+            warn = 80;
+        if (!(crit > warn))
+            crit = warn + 1;
+        return [warn, crit];
+    }
+
+    // One filter for every surface: the enabled providers in snapshot
+    // order. Takes the whole settings object so the ?? defaults live
+    // here too, not copied per surface.
+    function visibleProviders(snapshot, settings) {
+        var all = snapshot?.providers ?? [];
+        var showClaude = settings?.enableClaude ?? true;
+        var showCodex = settings?.enableCodex ?? true;
+        var showGo = settings?.enableGo ?? true;
+        return all.filter(p => (p.id === "claude" && showClaude) || (p.id === "codex" && showCodex) || (p.id === "opencodeGo" && showGo));
+    }
+
     function levelOf(percent, warn, crit) {
         if (percent === null || percent === undefined || isNaN(percent))
             return "unknown";

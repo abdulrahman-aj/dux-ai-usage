@@ -24,9 +24,7 @@ PluginComponent {
 
     readonly property real warnAt: pluginData.warnThreshold ?? 80
     readonly property real critAt: pluginData.critThreshold ?? 100
-    readonly property bool showClaude: pluginData.enableClaude ?? true
-    readonly property bool showCodex: pluginData.enableCodex ?? true
-    readonly property bool showGo: pluginData.enableGo ?? true
+    readonly property var tc: u.clampedThresholds(root.warnAt, root.critAt)
 
     AiUsageShared {
         id: u
@@ -45,10 +43,7 @@ PluginComponent {
     }
 
     readonly property var snapshot: snapshotVar.value
-    readonly property var providers: {
-        var all = snapshot?.providers ?? [];
-        return all.filter(p => (p.id === "claude" && root.showClaude) || (p.id === "codex" && root.showCodex) || (p.id === "opencodeGo" && root.showGo));
-    }
+    readonly property var providers: u.visibleProviders(root.snapshot, root.pluginData)
 
     horizontalBarPill: Component {
         Row {
@@ -118,8 +113,8 @@ PluginComponent {
                         // gauges, quiet/prominent usage link.
                         property var provider: modelData
                         property double nowMs: Date.now()
-                        readonly property var headline: u.headlineWindow(provider, root.warnAt, root.critAt)
-                        readonly property string level: u.headlineLevel(provider, root.warnAt, root.critAt)
+                        readonly property var headline: u.headlineWindow(provider, root.tc[0], root.tc[1])
+                        readonly property string level: u.headlineLevel(provider, root.tc[0], root.tc[1])
                         readonly property color state: u.stateColor(level)
 
                         spacing: Theme.spacingS
@@ -215,8 +210,8 @@ PluginComponent {
                                 width: parent.width
                                 win: modelData
                                 nowMs: nowMs
-                                warnAt: root.warnAt
-                                critAt: root.critAt
+                                warnAt: root.tc[0]
+                                critAt: root.tc[1]
                             }
                         }
 

@@ -23,9 +23,6 @@ DashTabComponent {
 
     readonly property real warnAt: pluginData.warnThreshold ?? 80
     readonly property real critAt: pluginData.critThreshold ?? 100
-    readonly property bool showClaude: pluginData.enableClaude ?? true
-    readonly property bool showCodex: pluginData.enableCodex ?? true
-    readonly property bool showGo: pluginData.enableGo ?? true
 
     AiUsageShared {
         id: u
@@ -44,10 +41,7 @@ DashTabComponent {
     }
 
     readonly property var snapshot: snapshotVar.value
-    readonly property var providers: {
-        var all = snapshot?.providers ?? [];
-        return all.filter(p => (p.id === "claude" && root.showClaude) || (p.id === "codex" && root.showCodex) || (p.id === "opencodeGo" && root.showGo));
-    }
+    readonly property var providers: u.visibleProviders(root.snapshot, root.pluginData)
 
     implicitHeight: Math.max(DashMetrics.tabMinHeight, content.implicitHeight + Theme.spacingL * 2)
     menuActions: [

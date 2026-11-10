@@ -18,9 +18,10 @@ Row {
         id: u
     }
 
-    readonly property var headline: u.headlineWindow(root.provider, root.warnAt, root.critAt)
-    readonly property string level: u.headlineLevel(root.provider, root.warnAt, root.critAt)
+    readonly property var headline: u.headlineWindow(root.provider, tc[0], tc[1])
+    readonly property string level: u.headlineLevel(root.provider, tc[0], tc[1])
     readonly property color state: u.stateColor(root.level)
+    readonly property var tc: u.clampedThresholds(root.warnAt, root.critAt)
 
     spacing: Theme.spacingXS
 

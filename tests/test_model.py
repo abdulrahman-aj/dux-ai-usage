@@ -220,3 +220,16 @@ def test_rate_limited_keeps_stale_since_for_age():
     old["staleSince"] = "2026-11-10T19:00:00Z"
     merged, _ = merge_rate_limited(fresh, [old], "2026-11-10T20:00:00Z")
     assert merged[0]["staleSince"] == "2026-11-10T19:00:00Z"
+
+
+def test_vanished_windows_forget_notified_state():
+    curr = _providers([("claude", "weekly-fable", 90.0, "R1")])
+    _, notified = compute_events([], curr, {}, 80, 100)
+    assert notified == {"claude/weekly-fable": "warn"}
+    # Scoped row drops to 0% (filtered from the snapshot): state pruned.
+    gone = _providers([("claude", "weekly", 4.0, "R1")])
+    events, notified = compute_events(curr, gone, notified, 80, 100)
+    assert events == [] and notified == {}
+    # Reappearing at warn fires again, like a re-arm.
+    events, _ = compute_events(gone, curr, notified, 80, 100)
+    assert [e["level"] for e in events] == ["warn"]
