@@ -27,6 +27,7 @@ PluginComponent {
     property int backoffMinutes: 0
     property bool busy: false
     property bool refreshQueued: false
+    property int pollSeq: 0
 
     readonly property string collectorPath: (pluginService?.getPluginPath(pluginId) ?? "") + "/collectors/collect.py"
 
@@ -68,6 +69,8 @@ PluginComponent {
             return;
         root.busy = true;
         watchdog.restart();
+        root.pollSeq++;
+        var seq = root.pollSeq;
         var args = ["python3", root.collectorPath, "--warn", String(root.warnAt), "--crit", String(root.critAt)];
         var disabled = root.disabledIds();
         if (disabled.length > 0)
@@ -79,11 +82,17 @@ PluginComponent {
         if (Object.keys(root.notified).length > 0)
             args.push("--notified", JSON.stringify(root.notified));
         Proc.runCommand("duxAiUsage.collect", args, (stdout, exitCode) => {
+            // Stale run (e.g. answered after the watchdog fired and a
+            // newer poll started): never apply old data over new state.
+            if (seq !== root.pollSeq)
+                return;
             root.busy = false;
             watchdog.stop();
             if (exitCode !== 0) {
-                // Collector failed: drop any queued refresh so a stuck
-                // backend can't spin manual retries; the timer retries.
+                // Collector failed: tell the user only if they asked for
+                // this run by hand; the timer keeps retrying either way.
+                if (root.refreshQueued)
+                    ToastService.showWarning("Usage refresh failed", "Providers are unreachable right now. Will retry on schedule.");
                 root.refreshQueued = false;
                 return;
             }

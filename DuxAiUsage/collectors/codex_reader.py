@@ -14,6 +14,7 @@ import os
 import select
 import shutil
 import subprocess
+import time
 
 RPC_TIMEOUT_SECONDS = 20
 USAGE_URL = "https://chatgpt.com/codex/settings/usage"
@@ -51,17 +52,20 @@ def _rpc(proc, request_id, method, params=None, timeout=RPC_TIMEOUT_SECONDS):
 
     Why not select()+readline: select fires on partial line data and the
     blocking readline then waits past the deadline. os.read with a
-    per-iteration remainder keeps the total bounded.
+    per-iteration remainder keeps the total bounded. The deadline uses
+    time.monotonic so an NTP step cannot extend the hang.
+    NOTE: proc.stdout is consumed raw via fileno below; never add a
+    proc.stdout.readline() here or bytes will vanish into the wrapper.
     """
     proc.stdin.write(
         json.dumps({"id": request_id, "method": method, "params": params or {}}) + "\n"
     )
     proc.stdin.flush()
     fd = proc.stdout.fileno()
-    deadline = dt.datetime.now().timestamp() + timeout
+    deadline = time.monotonic() + timeout
     buf = b""
     while True:
-        remaining = deadline - dt.datetime.now().timestamp()
+        remaining = deadline - time.monotonic()
         if remaining <= 0:
             raise TimeoutError(method)
         ready, _, _ = select.select([fd], [], [], min(remaining, 0.25))

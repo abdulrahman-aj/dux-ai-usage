@@ -176,10 +176,10 @@ def test_codex_error_mapping_distinguishes_auth_from_transient():
 
 
 def test_rpc_deadline_survives_partial_line():
-    # Partial line data must not wedge the reader past the deadline.
+    # Partial line data must not wedge the reader: with the write end
+    # held open (no EOF), only the deadline can end the wait.
     r, w = os.pipe()
     os.write(w, b'{"id":9,')
-    os.close(w)
 
     class FakeStdin:
         def write(self, data):
@@ -198,8 +198,9 @@ def test_rpc_deadline_survives_partial_line():
         with pytest.raises(TimeoutError):
             codex_reader._rpc(proc, 9, "x", timeout=0.6)
     finally:
+        os.close(w)
         os.close(r)
-    assert time.monotonic() - start < 5
+    assert time.monotonic() - start >= 0.5
 
 
 def test_rpc_reads_framed_response():

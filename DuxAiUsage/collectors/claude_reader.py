@@ -80,7 +80,7 @@ def parse_usage(payload):
                         "-"
                     ),
                     "label": "Weekly · " + display,
-                    "usedPercent": float(percent),
+                    "usedPercent": max(0.0, min(100.0, float(percent))),
                     "resetsAt": (
                         entry.get("resets_at")
                         if isinstance(entry.get("resets_at"), str)

@@ -73,8 +73,10 @@ DashCardComponent {
                      "monthly": "M", "weekly-fable": "F"};
         if (known[windowId])
             return known[windowId];
-        var code = "";
         var parts = String(windowId).split(/[^a-zA-Z0-9]+/);
+        if (parts.length === 1 && parts[0].length > 1)
+            return (parts[0][0] + parts[0][1]).toUpperCase();
+        var code = "";
         for (var i = 0; i < parts.length && code.length < 2; i++) {
             if (parts[i].length > 0)
                 code += parts[i][0].toUpperCase();
