@@ -14,8 +14,7 @@ BETA_HEADER = "oauth-2025-04-20"
 USER_AGENT = "dux-ai-usage/0.1.0"
 TIMEOUT_SECONDS = 15
 
-CREDENTIALS_PATH = os.path.join(
-    os.path.expanduser("~"), ".claude", ".credentials.json")
+CREDENTIALS_PATH = os.path.join(os.path.expanduser("~"), ".claude", ".credentials.json")
 USAGE_URL = "https://claude.ai/settings/usage"
 
 
@@ -73,14 +72,21 @@ def parse_usage(payload):
             percent = entry.get("percent")
             if isinstance(percent, bool) or not isinstance(percent, (int, float)):
                 continue
-            windows.append({
-                "id": "weekly-" + "".join(
-                    c.lower() if c.isalnum() else "-" for c in display).strip("-"),
-                "label": "Weekly · " + display,
-                "usedPercent": float(percent),
-                "resetsAt": (entry.get("resets_at")
-                             if isinstance(entry.get("resets_at"), str) else None),
-            })
+            windows.append(
+                {
+                    "id": "weekly-"
+                    + "".join(c.lower() if c.isalnum() else "-" for c in display).strip(
+                        "-"
+                    ),
+                    "label": "Weekly · " + display,
+                    "usedPercent": float(percent),
+                    "resetsAt": (
+                        entry.get("resets_at")
+                        if isinstance(entry.get("resets_at"), str)
+                        else None
+                    ),
+                }
+            )
     plan = ""
     if isinstance(payload, dict):
         sub = payload.get("subscriptionType")
@@ -91,22 +97,36 @@ def parse_usage(payload):
 
 def fetch(token=None, opener=None, credentials_path=CREDENTIALS_PATH):
     """Return a normalized Claude provider dict. Never raises."""
-    provider = {"id": "claude", "name": "Claude", "plan": "",
-                "stale": False, "windows": [], "resets": None, "error": None}
-    access_token = token if isinstance(token, str) and token \
+    provider = {
+        "id": "claude",
+        "name": "Claude",
+        "plan": "",
+        "stale": False,
+        "windows": [],
+        "resets": None,
+        "error": None,
+    }
+    access_token = (
+        token
+        if isinstance(token, str) and token
         else _read_access_token(credentials_path)
+    )
     if not access_token:
         provider["error"] = {
             "kind": "missing",
             "hint": "Claude Code isn't signed in here. Sign in, then wait for the next poll.",
         }
         return provider
-    request = urllib.request.Request(API_URL, method="GET", headers={
-        "Authorization": "Bearer " + access_token,
-        "anthropic-beta": BETA_HEADER,
-        "Accept": "application/json",
-        "User-Agent": USER_AGENT,
-    })
+    request = urllib.request.Request(
+        API_URL,
+        method="GET",
+        headers={
+            "Authorization": "Bearer " + access_token,
+            "anthropic-beta": BETA_HEADER,
+            "Accept": "application/json",
+            "User-Agent": USER_AGENT,
+        },
+    )
     try:
         if opener is not None:
             raw = opener(request)

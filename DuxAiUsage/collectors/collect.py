@@ -43,16 +43,22 @@ def _parse_json_arg(value, default):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--prev", default="",
-                        help="previous {'providers': [...]} snapshot for 429 reuse")
-    parser.add_argument("--notified", default="",
-                        help="previous {windowKey: level} notified map")
+    parser.add_argument(
+        "--prev",
+        default="",
+        help="previous {'providers': [...]} snapshot for 429 reuse",
+    )
+    parser.add_argument(
+        "--notified", default="", help="previous {windowKey: level} notified map"
+    )
     parser.add_argument("--warn", type=float, default=80.0)
     parser.add_argument("--crit", type=float, default=100.0)
-    parser.add_argument("--disable", default="",
-                        help="comma-separated provider ids to skip")
-    parser.add_argument("--only", default="",
-                        help="comma-separated provider ids to fetch (debug)")
+    parser.add_argument(
+        "--disable", default="", help="comma-separated provider ids to skip"
+    )
+    parser.add_argument(
+        "--only", default="", help="comma-separated provider ids to fetch (debug)"
+    )
     parser.add_argument("--no-reset-notify", action="store_true")
     args = parser.parse_args(argv)
 
@@ -73,9 +79,14 @@ def main(argv=None):
 
     merged, limited = merge_rate_limited(fresh, prev_providers)
     events, new_notified = compute_events(
-        prev_providers, merged, notified,
-        warn, crit, disabled=disabled,
-        reset_notify=not args.no_reset_notify)
+        prev_providers,
+        merged,
+        notified,
+        warn,
+        crit,
+        disabled=disabled,
+        reset_notify=not args.no_reset_notify,
+    )
 
     document = {
         "fetchedAt": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),

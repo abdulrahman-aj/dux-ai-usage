@@ -22,21 +22,21 @@ WINDOWS = (("rolling", "Rolling 5h"), ("weekly", "Weekly"), ("monthly", "Monthly
 
 def db_path():
     data_home = os.environ.get("XDG_DATA_HOME") or os.path.join(
-        os.path.expanduser("~"), ".local", "share")
+        os.path.expanduser("~"), ".local", "share"
+    )
     return os.path.join(data_home, "opencode", "opencode.db")
 
 
 def _read_api_key(path=None):
     target = path or db_path()
     try:
-        connection = sqlite3.connect(
-            "file:%s?mode=ro" % target, uri=True, timeout=5)
+        connection = sqlite3.connect("file:%s?mode=ro" % target, uri=True, timeout=5)
     except Exception:
         return None
     try:
         rows = connection.execute(
-            "SELECT value FROM credential WHERE integration_id = ?",
-            (INTEGRATION_ID,)).fetchall()
+            "SELECT value FROM credential WHERE integration_id = ?", (INTEGRATION_ID,)
+        ).fetchall()
     except Exception:
         return None
     finally:
@@ -49,8 +49,11 @@ def _read_api_key(path=None):
             payload = json.loads(value)
         except (TypeError, ValueError):
             continue
-        if isinstance(payload, dict) and isinstance(payload.get("key"), str) \
-                and payload["key"]:
+        if (
+            isinstance(payload, dict)
+            and isinstance(payload.get("key"), str)
+            and payload["key"]
+        ):
             return payload["key"]
     return None
 
@@ -71,19 +74,28 @@ def parse_usage(payload):
         if node.get("status") == "rate-limited":
             percent = 100.0
         resets_at = node.get("resetsAt")
-        windows.append({
-            "id": window_id,
-            "label": label,
-            "usedPercent": max(0.0, min(100.0, float(percent))),
-            "resetsAt": resets_at if isinstance(resets_at, str) else None,
-        })
+        windows.append(
+            {
+                "id": window_id,
+                "label": label,
+                "usedPercent": max(0.0, min(100.0, float(percent))),
+                "resetsAt": resets_at if isinstance(resets_at, str) else None,
+            }
+        )
     return windows
 
 
 def fetch(key=None, opener=None, path=None):
     """Return a normalized OpenCode Go provider dict. Never raises."""
-    provider = {"id": "opencodeGo", "name": "OpenCode Go", "plan": "Go",
-                "stale": False, "windows": [], "resets": None, "error": None}
+    provider = {
+        "id": "opencodeGo",
+        "name": "OpenCode Go",
+        "plan": "Go",
+        "stale": False,
+        "windows": [],
+        "resets": None,
+        "error": None,
+    }
     api_key = key if isinstance(key, str) and key else _read_api_key(path)
     if not api_key:
         provider["error"] = {
@@ -92,11 +104,14 @@ def fetch(key=None, opener=None, path=None):
         }
         return provider
     request = urllib.request.Request(
-        BASE_URL + USAGE_PATH, method="GET", headers={
+        BASE_URL + USAGE_PATH,
+        method="GET",
+        headers={
             "Authorization": "Bearer " + api_key,
             "Accept": "application/json",
             "User-Agent": USER_AGENT,
-        })
+        },
+    )
     try:
         if opener is not None:
             raw = opener(request)

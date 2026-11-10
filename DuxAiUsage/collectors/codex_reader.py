@@ -20,8 +20,11 @@ RPC_TIMEOUT_SECONDS = 20
 USAGE_URL = "https://chatgpt.com/codex/settings/usage"
 
 # windowDurationMins -> (window id, label)
-DURATIONS = {300: ("fiveHour", "5-hour"), 10080: ("weekly", "Weekly"),
-             43200: ("monthly", "Monthly")}
+DURATIONS = {
+    300: ("fiveHour", "5-hour"),
+    10080: ("weekly", "Weekly"),
+    43200: ("monthly", "Monthly"),
+}
 
 
 def runtime_env():
@@ -37,8 +40,9 @@ def runtime_env():
 
 
 def _rpc(proc, request_id, method, params=None):
-    proc.stdin.write(json.dumps(
-        {"id": request_id, "method": method, "params": params or {}}) + "\n")
+    proc.stdin.write(
+        json.dumps({"id": request_id, "method": method, "params": params or {}}) + "\n"
+    )
     proc.stdin.flush()
     deadline = dt.datetime.now().timestamp() + RPC_TIMEOUT_SECONDS
     while dt.datetime.now().timestamp() < deadline:
@@ -153,8 +157,12 @@ def fetch_limits(run=None):
         env=runtime_env(),
     )
     try:
-        _rpc(proc, 1, "initialize",
-             {"clientInfo": {"name": "dux-ai-usage", "version": "1"}})
+        _rpc(
+            proc,
+            1,
+            "initialize",
+            {"clientInfo": {"name": "dux-ai-usage", "version": "1"}},
+        )
         proc.stdin.write(json.dumps({"method": "initialized", "params": {}}) + "\n")
         proc.stdin.flush()
         response = _rpc(proc, 2, "account/rateLimits/read")
@@ -175,8 +183,15 @@ def fetch_limits(run=None):
 
 def fetch(run=None):
     """Return a normalized Codex provider dict. Never raises."""
-    provider = {"id": "codex", "name": "Codex", "plan": "",
-                "stale": False, "windows": [], "resets": None, "error": None}
+    provider = {
+        "id": "codex",
+        "name": "Codex",
+        "plan": "",
+        "stale": False,
+        "windows": [],
+        "resets": None,
+        "error": None,
+    }
     try:
         result = fetch_limits(run=run)
     except FileNotFoundError:

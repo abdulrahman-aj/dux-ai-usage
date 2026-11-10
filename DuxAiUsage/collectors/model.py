@@ -70,8 +70,9 @@ def _provider_name(providers, provider_id):
     return provider_id
 
 
-def compute_events(prev_providers, curr_providers, notified,
-                   warn, crit, disabled=(), reset_notify=True):
+def compute_events(
+    prev_providers, curr_providers, notified, warn, crit, disabled=(), reset_notify=True
+):
     """Compare snapshots, returning (events, new_notified).
 
     Rules: an event fires once per window per upward crossing
@@ -104,14 +105,16 @@ def compute_events(prev_providers, curr_providers, notified,
             new_reset = window.get("resetsAt")
             if old_reset and new_reset and old_reset != new_reset:
                 if notified.pop(key, None) == "crit" and reset_notify:
-                    events.append({
-                        "level": "reset",
-                        "providerId": provider_id,
-                        "providerName": name,
-                        "windowId": window_id,
-                        "windowLabel": window.get("label") or window_id,
-                        "usedPercent": percent,
-                    })
+                    events.append(
+                        {
+                            "level": "reset",
+                            "providerId": provider_id,
+                            "providerName": name,
+                            "windowId": window_id,
+                            "windowLabel": window.get("label") or window_id,
+                            "usedPercent": percent,
+                        }
+                    )
                 # New period below: fall through to level check with no
                 # notified state so a still-high window re-fires once.
             rank = RANK.get(level_of(percent, warn, crit), 0)
@@ -121,14 +124,16 @@ def compute_events(prev_providers, curr_providers, notified,
             if rank > RANK.get(notified.get(key), 0):
                 level = "crit" if rank == 2 else "warn"
                 notified[key] = level
-                events.append({
-                    "level": level,
-                    "providerId": provider_id,
-                    "providerName": name,
-                    "windowId": window_id,
-                    "windowLabel": window.get("label") or window_id,
-                    "usedPercent": percent,
-                })
+                events.append(
+                    {
+                        "level": level,
+                        "providerId": provider_id,
+                        "providerName": name,
+                        "windowId": window_id,
+                        "windowLabel": window.get("label") or window_id,
+                        "usedPercent": percent,
+                    }
+                )
 
     for key in [k for k in notified if k.split("/")[0] in disabled]:
         del notified[key]
@@ -148,8 +153,12 @@ def merge_rate_limited(fresh_providers, prev_providers):
     for provider in fresh_providers or []:
         error = provider.get("error") or {}
         old = prev.get(provider.get("id"))
-        if (error.get("kind") == "rateLimited" and isinstance(old, dict)
-                and old.get("windows") and not (old.get("error") or {}).get("kind")):
+        if (
+            error.get("kind") == "rateLimited"
+            and isinstance(old, dict)
+            and old.get("windows")
+            and not (old.get("error") or {}).get("kind")
+        ):
             kept = dict(old)
             kept["stale"] = True
             merged.append(kept)
