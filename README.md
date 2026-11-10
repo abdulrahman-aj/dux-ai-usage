@@ -43,6 +43,7 @@ dms ipc call plugins reload duxAiUsage
 
 ```json
 {"fetchedAt": "...", "providers": [{"id": "...", "name": "...", "plan": "...",
+ "stale": false, "headlineId": "weekly", "usageUrl": "...",
  "windows": [{"id": "...", "label": "...", "usedPercent": 17.0, "resetsAt": "..."}],
  "resets": {"available": 0, "url": "..."} | null,
  "error": null | {"kind": "missing|auth|rateLimited|unavailable", "hint": "..."}}],
@@ -56,9 +57,16 @@ Rules:
   output only).
 - One shared poller: the daemon component polls; pills/cards/tabs read the
   shared snapshot. Polling is gentle (default 5 min, minimum 2 min) with
-  backoff on HTTP 429, keeping last-known values.
-- Banked resets are display-only with a button that opens the provider's
-  usage page for manual confirmation. Nothing is ever redeemed automatically.
+  backoff on HTTP 429, keeping last-known values (marked stale with their
+  original fetch, so the tag shows only when actually stale, with its age).
+- The pill headlines one window per provider (long window by default; a
+  shorter window at/above warn takes over; see collectors/model.py).
+  Unused Claude per-model rows ("Weekly · Fable" at 0%) stay out of the
+  snapshot.
+- Banked resets are display-only with a quiet usage-page link (prominent
+  only when resets are banked). Nothing is ever redeemed automatically.
+- All QML formatting (colors, headline, stale/updated text) lives in one
+  place: DuxAiUsage/AiUsageShared.qml, used by every surface.
 
 ## Shell quirks found while building (Dux 2.1.1)
 

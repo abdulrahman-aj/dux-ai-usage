@@ -22,7 +22,13 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import claude_reader
 import codex_reader
 import go_reader
-from model import clamp_thresholds, compute_events, merge_rate_limited
+from model import (
+    clamp_thresholds,
+    compute_events,
+    headline_window,
+    merge_rate_limited,
+    visible_windows,
+)
 
 READERS = (
     ("claude", claude_reader.fetch),
@@ -67,6 +73,7 @@ def main(argv=None):
     only = {p for p in args.only.split(",") if p.strip()}
     prev = _parse_json_arg(args.prev, {})
     prev_providers = prev.get("providers") if isinstance(prev, dict) else []
+    prev_fetched = prev.get("fetchedAt") if isinstance(prev, dict) else None
     notified = _parse_json_arg(args.notified, {})
 
     fresh = []
@@ -77,7 +84,13 @@ def main(argv=None):
             continue
         fresh.append(reader())
 
-    merged, limited = merge_rate_limited(fresh, prev_providers)
+    merged, limited = merge_rate_limited(fresh, prev_providers, prev_fetched)
+    for provider in merged:
+        # Hide unused per-model rows here so every surface (and test)
+        # shares one rule; annotate the pill/cards headline window.
+        provider["windows"] = visible_windows(provider)
+        headline = headline_window(provider, warn, crit)
+        provider["headlineId"] = headline.get("id") if headline else None
     events, new_notified = compute_events(
         prev_providers,
         merged,

@@ -4,7 +4,8 @@ import qs.DCommon.Widgets
 import qs.Services
 import qs.Modules.Plugins
 
-// Glanceable card: worst window per provider. Click opens the dash tab.
+// Glanceable overview card: logo + headline number per provider.
+// Click opens the dash tab (clickable + opensTab on the base).
 DashCardComponent {
     id: root
 
@@ -27,6 +28,10 @@ DashCardComponent {
     readonly property bool showCodex: cardSettings.enableCodex ?? true
     readonly property bool showGo: cardSettings.enableGo ?? true
 
+    AiUsageShared {
+        id: u
+    }
+
     clickable: true
 
     Connections {
@@ -42,91 +47,49 @@ DashCardComponent {
         return all.filter(p => (p.id === "claude" && root.showClaude) || (p.id === "codex" && root.showCodex) || (p.id === "opencodeGo" && root.showGo));
     }
 
-    function worstText(provider) {
-        var code = shortCode(provider.id, "").provider;
-        if (provider.error)
-            return {"text": code + " –", "level": "unknown"};
-        var worst = null;
-        var windows = provider.windows ?? [];
-        for (var i = 0; i < windows.length; i++) {
-            var pct = windows[i].usedPercent;
-            if (pct === null || pct === undefined)
-                continue;
-            if (worst === null || pct > worst.usedPercent)
-                worst = windows[i];
-        }
-        if (!worst)
-            return {"text": code + " …", "level": "unknown"};
-        return {"text": code + " " + shortCode(provider.id, worst.id).window + " " + pctText(worst.usedPercent),
-                "level": levelOf(worst.usedPercent, root.warnAt, root.critAt)};
-    }
-
-    // Inline formatting helpers (see Widget.qml).
-    function shortCode(providerId, windowId) {
-        var providers = {"claude": "Cl", "codex": "Cx", "opencodeGo": "Go"};
-        return {"provider": providers[providerId] ?? providerId,
-                "window": shortWindow(windowId)};
-    }
-
-    function shortWindow(windowId) {
-        var known = {"fiveHour": "5h", "rolling": "5h", "weekly": "W",
-                     "monthly": "M", "weekly-fable": "F"};
-        if (known[windowId])
-            return known[windowId];
-        var parts = String(windowId).split(/[^a-zA-Z0-9]+/);
-        if (parts.length === 1 && parts[0].length > 1)
-            return (parts[0][0] + parts[0][1]).toUpperCase();
-        var code = "";
-        for (var i = 0; i < parts.length && code.length < 2; i++) {
-            if (parts[i].length > 0)
-                code += parts[i][0].toUpperCase();
-        }
-        return code || windowId;
-    }
-
-    function pctText(percent) {
-        if (percent === null || percent === undefined || isNaN(percent))
-            return "–";
-        return Math.round(percent) + "%";
-    }
-
-    function levelOf(percent, warn, crit) {
-        if (percent === null || percent === undefined || isNaN(percent))
-            return "unknown";
-        if (percent >= crit)
-            return "crit";
-        if (percent >= warn)
-            return "warn";
-        return "ok";
-    }
-
-    function levelColor(level) {
-        if (level === "crit")
-            return Theme.error;
-        if (level === "warn")
-            return Theme.warning;
-        return root.contentColor;
-    }
-
-    Column {
+    Row {
         anchors.centerIn: parent
-        spacing: Theme.spacingXS
+        spacing: Theme.spacingM
 
         Repeater {
             model: root.providers
+            delegate: Row {
+                property var provider: modelData
+                readonly property var headline: u.headlineWindow(provider, root.warnAt, root.critAt)
+                readonly property string level: u.headlineLevel(provider, root.warnAt, root.critAt)
 
-            StyledText {
-                anchors.horizontalCenter: parent.horizontalCenter
-                text: root.worstText(modelData).text
-                font.pixelSize: Theme.fontSizeLarge
-                font.weight: Theme.fontWeightMedium
-                color: root.levelColor(root.worstText(modelData).level)
+                spacing: Theme.spacingXS
+
+                DSVGIcon {
+                    source: u.logoFor(provider?.id)
+                    size: 18
+                    colorOverride: u.stateColor(level)
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+
+                StyledText {
+                    text: provider?.error ? "–" : u.pctText(headline?.usedPercent)
+                    font.pixelSize: Theme.fontSizeLarge
+                    font.weight: Theme.fontWeightMedium
+                    color: u.stateColor(level)
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+
+                StyledText {
+                    visible: u.isShortTakeover(provider) && !provider?.error
+                    text: u.shortMark(headline?.id)
+                    font.pixelSize: Theme.fontSizeSmall
+                    color: u.stateColor(level)
+                    opacity: 0.85
+                    anchors.top: parent.top
+                    anchors.topMargin: 2
+                }
             }
         }
 
         StyledText {
             visible: root.providers.length === 0
-            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.verticalCenter: parent.verticalCenter
             text: "AI …"
             font.pixelSize: Theme.fontSizeLarge
             color: root.contentColor

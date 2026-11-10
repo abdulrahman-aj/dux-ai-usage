@@ -233,6 +233,7 @@ def fetch(run=None):
         "stale": False,
         "windows": [],
         "resets": None,
+        "usageUrl": USAGE_URL,
         "error": None,
     }
     try:

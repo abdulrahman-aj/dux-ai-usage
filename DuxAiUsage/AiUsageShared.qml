@@ -1,0 +1,172 @@
+import QtQuick
+import qs.Common
+
+// One shared copy of every AI-usage formatting rule. Every surface
+// (pill, popout, dash tab, overview card, desktop widget) instantiates
+// this and calls the same functions, so color/headline/stale behavior
+// cannot drift between surfaces. The threshold and headline rules
+// themselves live in collectors/model.py (unit-tested); this file only
+// formats the snapshot collect.py annotates (headlineId, staleSince).
+QtObject {
+    id: root
+
+    // Strong red for critical/blocked. Why not Theme.error: in the
+    // default dark themes Theme.error is a pale salmon, which reads as
+    // "info" next to amber. Critical must be unmistakable.
+    readonly property color critColor: "#F44336"
+
+    // Long (default headline) window per provider. Mirrors
+    // LONG_WINDOW in collectors/model.py.
+    function longIdFor(providerId) {
+        if (providerId === "opencodeGo")
+            return "monthly";
+        return "weekly";
+    }
+
+    function levelOf(percent, warn, crit) {
+        if (percent === null || percent === undefined || isNaN(percent))
+            return "unknown";
+        if (percent >= crit)
+            return "crit";
+        if (percent >= warn)
+            return "warn";
+        return "ok";
+    }
+
+    // The single color rule used by every surface: theme accent when
+    // calm, amber at warning, strong red at critical/blocked.
+    function stateColor(level) {
+        if (level === "crit")
+            return root.critColor;
+        if (level === "warn")
+            return Theme.warning;
+        if (level === "ok")
+            return Theme.primary;
+        return Theme.surfaceVariantText;
+    }
+
+    // Headline window for a provider: collect.py annotates headlineId
+    // (see model.headline_window). The fallback mirrors that rule for
+    // snapshots predating the annotation.
+    function headlineWindow(provider, warn, crit) {
+        var windows = provider?.windows ?? [];
+        if (windows.length === 0)
+            return null;
+        var want = provider?.headlineId;
+        for (var i = 0; i < windows.length; i++) {
+            if (windows[i]?.id === want)
+                return windows[i];
+        }
+        var longId = root.longIdFor(provider?.id);
+        var best = null;
+        for (var j = 0; j < windows.length; j++) {
+            var pct = windows[j]?.usedPercent;
+            if (pct === null || pct === undefined || isNaN(pct))
+                continue;
+            if (windows[j]?.id === longId)
+                return windows[j];
+            if (best === null || pct > best.usedPercent)
+                best = windows[j];
+        }
+        return best;
+    }
+
+    function headlineLevel(provider, warn, crit) {
+        var window = root.headlineWindow(provider, warn, crit);
+        if (provider?.error)
+            return "unknown";
+        if (!window)
+            return "unknown";
+        return root.levelOf(window.usedPercent, warn, crit);
+    }
+
+    // True when the pill shows a short window instead of the long
+    // default, i.e. the tiny window mark is needed.
+    function isShortTakeover(provider) {
+        var id = provider?.headlineId;
+        if (!id)
+            return false;
+        return id !== root.longIdFor(provider?.id);
+    }
+
+    // Tiny mark identifying a short headline window ("5h", "W", "M").
+    // Shown only on takeover; the normal state is logo + number alone.
+    function shortMark(windowId) {
+        var known = {"fiveHour": "5h", "rolling": "5h", "weekly": "W", "monthly": "M"};
+        if (known[windowId])
+            return known[windowId];
+        return "";
+    }
+
+    function logoFor(providerId) {
+        var names = {"claude": "claude", "codex": "codex", "opencodeGo": "opencode"};
+        var name = names[providerId] ?? "opencode";
+        return Qt.resolvedUrl("assets/" + name + ".svg");
+    }
+
+    function providerLink(provider) {
+        return provider?.usageUrl ?? provider?.resets?.url ?? "";
+    }
+
+    function pctText(percent) {
+        if (percent === null || percent === undefined || isNaN(percent))
+            return "–";
+        return Math.round(percent) + "%";
+    }
+
+    function countdown(resetsAt, nowMs) {
+        if (!resetsAt)
+            return "";
+        var ms = new Date(resetsAt).getTime() - (nowMs ?? Date.now());
+        if (!(ms > 0))
+            return "soon";
+        var mins = Math.ceil(ms / 60000);
+        if (mins < 60)
+            return mins + "m";
+        var hours = Math.floor(mins / 60);
+        var rest = mins - hours * 60;
+        if (hours < 48)
+            return rest === 0 ? hours + "h" : hours + "h " + rest + "m";
+        var days = Math.floor(hours / 24);
+        var dayRest = hours - days * 24;
+        return dayRest === 0 ? days + "d" : days + "d " + dayRest + "h";
+    }
+
+    function ageText(isoString, nowMs) {
+        if (!isoString)
+            return "";
+        var ms = (nowMs ?? Date.now()) - new Date(isoString).getTime();
+        if (!(ms > 0))
+            return "just now";
+        var mins = Math.floor(ms / 60000);
+        if (mins < 1)
+            return "just now";
+        if (mins < 60)
+            return mins + "m";
+        var hours = Math.floor(mins / 60);
+        if (hours < 48)
+            return hours + "h";
+        return Math.floor(hours / 24) + "d";
+    }
+
+    function updatedText(stamp, nowMs) {
+        if (!stamp)
+            return "Waiting for first poll…";
+        var ago = root.ageText(stamp, nowMs);
+        if (ago === "just now" || ago === "")
+            return "Updated just now";
+        return "Updated " + ago + " ago";
+    }
+
+    // The last-known tag shows only for values kept from a failed/429
+    // poll (provider.stale), with the age of those values.
+    function staleText(provider, fetchedAt, nowMs) {
+        if (provider?.stale !== true)
+            return "";
+        var since = provider?.staleSince ?? fetchedAt;
+        var ago = root.ageText(since, nowMs);
+        if (ago === "" || ago === "just now")
+            return "· last-known";
+        return "· last-known " + ago;
+    }
+}

@@ -13,6 +13,7 @@ API_URL = "https://api.anthropic.com/api/oauth/usage"
 BETA_HEADER = "oauth-2025-04-20"
 USER_AGENT = "dux-ai-usage/0.1.0"
 TIMEOUT_SECONDS = 15
+USAGE_URL = "https://claude.ai/settings/usage"
 
 CREDENTIALS_PATH = os.path.join(os.path.expanduser("~"), ".claude", ".credentials.json")
 
@@ -105,6 +106,7 @@ def fetch(token=None, opener=None, credentials_path=CREDENTIALS_PATH):
         "stale": False,
         "windows": [],
         "resets": None,
+        "usageUrl": USAGE_URL,
         "error": None,
     }
     access_token = (

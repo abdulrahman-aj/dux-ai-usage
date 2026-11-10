@@ -160,12 +160,13 @@ PluginComponent {
                     resetsAt = windows[j].resetsAt;
             }
         }
-        var left = "soon";
+        if (!resetsAt)
+            return "soon";
         try {
-            left = "in " + countdown(resetsAt);
+            return "in " + countdown(resetsAt);
         } catch (e) {
+            return "soon";
         }
-        return left;
     }
 
     // Inline formatting helpers (see Widget.qml): the shell caches shared

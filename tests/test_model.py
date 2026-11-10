@@ -7,7 +7,14 @@ sys.path.insert(
     0, os.path.join(os.path.dirname(__file__), "..", "DuxAiUsage", "collectors")
 )
 
-from model import clamp_thresholds, compute_events, merge_rate_limited
+from model import (
+    clamp_thresholds,
+    compute_events,
+    headline_window,
+    merge_rate_limited,
+    visible_windows,
+    window_visible,
+)
 
 
 def _providers(specs):
@@ -114,3 +121,102 @@ def test_rate_limited_keeps_last_known_values():
     auth = [{"id": "codex", "error": {"kind": "auth", "hint": "login"}}]
     merged, limited = merge_rate_limited(auth, prev)
     assert merged == auth and limited == []
+
+
+def _headlined(provider_id, windows, warn=80, crit=100):
+    """Build one provider and return its headline window id (or None)."""
+    provider = {
+        "id": provider_id,
+        "name": provider_id,
+        "windows": [
+            {"id": wid, "label": wid, "usedPercent": pct, "resetsAt": None}
+            for wid, pct in windows
+        ],
+    }
+    headline = headline_window(provider, warn, crit)
+    return headline.get("id") if headline else None
+
+
+def test_headline_defaults_to_long_window():
+    assert _headlined("claude", [("fiveHour", 30.0), ("weekly", 4.0)]) == "weekly"
+    assert _headlined("codex", [("fiveHour", 8.0), ("weekly", 100.0)]) == "weekly"
+    monthly = [("rolling", 19.0), ("weekly", 20.0), ("monthly", 89.0)]
+    assert _headlined("opencodeGo", monthly) == "monthly"
+
+
+def test_short_window_takes_over_at_warning():
+    # Calm long window, burning short one: the pill shows the short one.
+    assert _headlined("claude", [("fiveHour", 85.0), ("weekly", 4.0)]) == "fiveHour"
+    assert (
+        _headlined(
+            "opencodeGo", [("rolling", 10.0), ("weekly", 91.0), ("monthly", 20.0)]
+        )
+        == "weekly"
+    )
+    # Below warn the long window keeps the headline.
+    assert _headlined("claude", [("fiveHour", 79.0), ("weekly", 4.0)]) == "weekly"
+
+
+def test_short_warn_never_hides_long_crit():
+    assert _headlined("codex", [("fiveHour", 85.0), ("weekly", 100.0)]) == "weekly"
+    # ... but a short crit outranks a long warn.
+    assert _headlined("codex", [("fiveHour", 100.0), ("weekly", 85.0)]) == "fiveHour"
+
+
+def test_headline_ties_and_missing_windows():
+    # Two short windows warning: higher percent wins.
+    assert (
+        _headlined(
+            "opencodeGo", [("rolling", 95.0), ("weekly", 91.0), ("monthly", 10.0)]
+        )
+        == "rolling"
+    )
+    # Long window absent: worst short warning still takes the headline.
+    assert _headlined("claude", [("fiveHour", 90.0)]) == "fiveHour"
+    # Long window missing entirely: fall back to the highest window.
+    assert _headlined("codex", [("fiveHour", 30.0)]) == "fiveHour"
+    assert _headlined("claude", []) is None
+    # Scoped per-model rows never headline, however high.
+    scoped = [("weekly", 4.0), ("weekly-fable", 99.0), ("fiveHour", 10.0)]
+    assert _headlined("claude", scoped) == "weekly"
+    # Non-numeric windows are ignored.
+    assert _headlined("codex", [("fiveHour", None), ("weekly", 12.0)]) == "weekly"
+    assert _headlined("codex", [("fiveHour", None)]) is None
+
+
+def test_scoped_rows_visible_only_when_used():
+    assert window_visible({"id": "weekly", "usedPercent": 0.0}) is True
+    assert window_visible({"id": "fiveHour", "usedPercent": 0.0}) is True
+    assert window_visible({"id": "weekly-fable", "usedPercent": 0.0}) is False
+    assert window_visible({"id": "weekly-fable", "usedPercent": None}) is False
+    assert window_visible({"id": "weekly-fable", "usedPercent": 3.0}) is True
+    provider = {
+        "id": "claude",
+        "windows": [
+            {"id": "fiveHour", "usedPercent": 30.0},
+            {"id": "weekly-fable", "usedPercent": 0.0},
+        ],
+    }
+    assert [w["id"] for w in visible_windows(provider)] == ["fiveHour"]
+
+
+def test_rate_limited_keeps_stale_since_for_age():
+    prev = _providers([("claude", "fiveHour", 17.0, "R1")])
+    fresh = [
+        {
+            "id": "claude",
+            "stale": False,
+            "windows": [],
+            "error": {"kind": "rateLimited", "hint": "retry"},
+        }
+    ]
+    merged, limited = merge_rate_limited(fresh, prev, "2026-11-10T20:00:00Z")
+    assert limited == ["claude"]
+    assert merged[0]["stale"] is True
+    assert merged[0]["staleSince"] == "2026-11-10T20:00:00Z"
+    # An already-stale value keeps its original fetch time.
+    old = dict(prev[0])
+    old["stale"] = True
+    old["staleSince"] = "2026-11-10T19:00:00Z"
+    merged, _ = merge_rate_limited(fresh, [old], "2026-11-10T20:00:00Z")
+    assert merged[0]["staleSince"] == "2026-11-10T19:00:00Z"
