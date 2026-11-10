@@ -45,31 +45,31 @@ def _providers(specs):
 
 def test_first_crossing_fires_warn_once_then_crit():
     curr = _providers([("claude", "fiveHour", 85.0, "R1")])
-    events, notified = compute_events([], curr, {}, 80, 100)
+    events, notified = compute_events(curr, {}, 80, 100)
     assert [e["level"] for e in events] == ["warn"]
     assert notified == {"claude/fiveHour": "warn"}
     # Same poll again: no repeat.
-    events, notified = compute_events(curr, curr, notified, 80, 100)
+    events, notified = compute_events(curr, notified, 80, 100)
     assert events == []
     # Rising to crit fires once.
     higher = _providers([("claude", "fiveHour", 100.0, "R1")])
-    events, notified = compute_events(curr, higher, notified, 80, 100)
+    events, notified = compute_events(higher, notified, 80, 100)
     assert [e["level"] for e in events] == ["crit"]
 
 
 def test_recovery_rearms_and_reset_period_clears():
     curr = _providers([("codex", "weekly", 100.0, "R1")])
-    _, notified = compute_events([], curr, {}, 80, 100)
+    _, notified = compute_events(curr, {}, 80, 100)
     assert notified == {"codex/weekly": "crit"}
     # Drop below warn after crit: one reset event, then re-armed.
     low = _providers([("codex", "weekly", 10.0, "R1")])
-    events, notified = compute_events(curr, low, notified, 80, 100)
+    events, notified = compute_events(low, notified, 80, 100)
     assert [e["level"] for e in events] == ["reset"]
     assert notified == {}
     # Exhaust again, then the period rolls: one reset event, re-armed.
-    _, notified = compute_events(low, curr, notified, 80, 100)
+    _, notified = compute_events(curr, notified, 80, 100)
     rolled = _providers([("codex", "weekly", 5.0, "R2")])
-    events, notified = compute_events(curr, rolled, notified, 80, 100)
+    events, notified = compute_events(rolled, notified, 80, 100)
     assert [e["level"] for e in events] == ["reset"]
     assert notified == {}
 
@@ -78,40 +78,40 @@ def test_moving_resets_at_does_not_refire_warn():
     # Rolling windows (Go) move resetsAt every poll while staying high:
     # warn fires once, not once per poll.
     first = _providers([("opencodeGo", "rolling", 85.0, "T1")])
-    events, notified = compute_events([], first, {}, 80, 100)
+    events, notified = compute_events(first, {}, 80, 100)
     assert [e["level"] for e in events] == ["warn"]
     second = _providers([("opencodeGo", "rolling", 85.0, "T2")])
-    events, notified = compute_events(first, second, notified, 80, 100)
+    events, notified = compute_events(second, notified, 80, 100)
     assert events == []
     third = _providers([("opencodeGo", "rolling", 85.0, "T3")])
-    events, notified = compute_events(second, third, notified, 80, 100)
+    events, notified = compute_events(third, notified, 80, 100)
     assert events == [] and notified == {"opencodeGo/rolling": "warn"}
 
 
 def test_reset_event_opt_out_and_non_exhausted_roll_silent():
     prev = _providers([("go", "weekly", 90.0, "R1")])
-    _, notified = compute_events([], prev, {}, 80, 100)
+    _, notified = compute_events(prev, {}, 80, 100)
     rolled = _providers([("go", "weekly", 4.0, "R2")])
-    events, _ = compute_events(prev, rolled, notified, 80, 100, reset_notify=False)
+    events, _ = compute_events(rolled, notified, 80, 100, reset_notify=False)
     assert events == []
     # Warn-level (not exhausted) roll is silent even with reset_notify on.
-    events, notified = compute_events(prev, rolled, notified, 80, 100)
+    events, notified = compute_events(rolled, notified, 80, 100)
     assert events == [] and notified == {}
 
 
 def test_disabled_providers_skipped_and_dropped():
     curr = _providers([("claude", "fiveHour", 99.0, "R1")])
-    events, notified = compute_events([], curr, {}, 80, 100, disabled={"claude"})
+    events, notified = compute_events(curr, {}, 80, 100, disabled={"claude"})
     assert events == [] and notified == {}
     stale = {"claude/fiveHour": "warn"}
-    _, notified = compute_events([], curr, stale, 80, 100, disabled={"claude"})
+    _, notified = compute_events(curr, stale, 80, 100, disabled={"claude"})
     assert notified == {}
 
 
 def test_inverted_thresholds_clamped():
     assert clamp_thresholds(90, 80) == (90.0, 91.0)
     curr = _providers([("go", "monthly", 90.5, "R1")])
-    events, _ = compute_events([], curr, {}, 90, 80)
+    events, _ = compute_events(curr, {}, 90, 80)
     assert [e["level"] for e in events] == ["warn"]
 
 
@@ -255,20 +255,20 @@ def test_rate_limited_keeps_stale_since_for_age():
 
 def test_vanished_windows_forget_notified_state():
     curr = _providers([("claude", "weekly-fable", 90.0, "R1")])
-    _, notified = compute_events([], curr, {}, 80, 100)
+    _, notified = compute_events(curr, {}, 80, 100)
     assert notified == {"claude/weekly-fable": "warn"}
     # Scoped row drops to 0% (filtered from the snapshot): state pruned.
     gone = _providers([("claude", "weekly", 4.0, "R1")])
-    events, notified = compute_events(curr, gone, notified, 80, 100)
+    events, notified = compute_events(gone, notified, 80, 100)
     assert events == [] and notified == {}
     # Reappearing at warn fires again, like a re-arm.
-    events, _ = compute_events(gone, curr, notified, 80, 100)
+    events, _ = compute_events(curr, notified, 80, 100)
     assert [e["level"] for e in events] == ["warn"]
 
 
 def test_errored_provider_keeps_notified_state():
     curr = _providers([("codex", "weekly", 90.0, "R1")])
-    _, notified = compute_events([], curr, {}, 80, 100)
+    _, notified = compute_events(curr, {}, 80, 100)
     assert notified == {"codex/weekly": "warn"}
     # Transient failure (no windows): no events, state survives.
     failed = [
@@ -279,11 +279,11 @@ def test_errored_provider_keeps_notified_state():
             "windows": [],
         }
     ]
-    events, notified = compute_events(curr, failed, notified, 80, 100)
+    events, notified = compute_events(failed, notified, 80, 100)
     assert events == [] and notified == {"codex/weekly": "warn"}
     # Recovery at the same level stays silent; escalation still fires.
-    events, notified = compute_events(failed, curr, notified, 80, 100)
+    events, notified = compute_events(curr, notified, 80, 100)
     assert events == []
     higher = _providers([("codex", "weekly", 100.0, "R1")])
-    events, notified = compute_events(failed, higher, notified, 80, 100)
+    events, notified = compute_events(higher, notified, 80, 100)
     assert [e["level"] for e in events] == ["crit"]

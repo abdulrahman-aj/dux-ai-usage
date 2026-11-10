@@ -113,7 +113,7 @@ def _provider_name(providers, provider_id):
 
 
 def compute_events(
-    prev_providers, curr_providers, notified, warn, crit, disabled=(), reset_notify=True
+    curr_providers, notified, warn, crit, disabled=(), reset_notify=True
 ):
     """Compare snapshots, returning (events, new_notified).
 

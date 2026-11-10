@@ -68,7 +68,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     warn, crit = clamp_thresholds(args.warn, args.crit)
-    disabled = {p for p in args.disable.split(",") if p.strip()}
+    disabled = {p.strip() for p in args.disable.split(",") if p.strip()}
     prev = _parse_json_arg(args.prev, {})
     prev_providers = prev.get("providers") if isinstance(prev, dict) else []
     prev_fetched = prev.get("fetchedAt") if isinstance(prev, dict) else None
@@ -91,7 +91,6 @@ def main(argv=None):
             "id"
         ) != LONG_WINDOW.get(provider.get("id"))
     events, new_notified = compute_events(
-        prev_providers,
         merged,
         notified,
         warn,

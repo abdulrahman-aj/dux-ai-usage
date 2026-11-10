@@ -66,7 +66,7 @@ def _window(window_id, label, node):
 
 
 def parse_usage(payload):
-    """Normalize a decoded /api/oauth/usage payload (tolerant of nulls)."""
+    """Normalize a decoded /api/oauth/usage payload to windows (tolerant of nulls)."""
     windows = []
     if isinstance(payload, dict):
         windows.append(_window("fiveHour", "5-hour", payload.get("five_hour")))
@@ -99,9 +99,7 @@ def parse_usage(payload):
                     ),
                 }
             )
-    # The plan comes from the credentials file at fetch time, never
-    # from the usage payload.
-    return {"plan": "", "windows": windows}
+    return windows
 
 
 def fetch(token=None, opener=None, credentials_path=CREDENTIALS_PATH):
@@ -162,8 +160,8 @@ def fetch(token=None, opener=None, credentials_path=CREDENTIALS_PATH):
                 "hint": "Claude usage is unreachable right now. Will retry next poll.",
             }
         return provider
-    parsed = parse_usage(payload if isinstance(payload, dict) else {})
-    provider["plan"] = parsed["plan"] or _read_plan(credentials_path)
-    provider["windows"] = parsed["windows"]
+    # The plan comes from the credentials file, never the usage payload.
+    provider["plan"] = _read_plan(credentials_path)
+    provider["windows"] = parse_usage(payload if isinstance(payload, dict) else {})
     # The usage payload exposes no banked-reset count, so no resets row.
     return provider

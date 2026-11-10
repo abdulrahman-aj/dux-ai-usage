@@ -99,7 +99,7 @@ QtObject {
     }
 
     function providerLink(provider) {
-        return provider?.usageUrl ?? provider?.resets?.url ?? "";
+        return provider?.usageUrl ?? "";
     }
 
     function pctText(percent) {

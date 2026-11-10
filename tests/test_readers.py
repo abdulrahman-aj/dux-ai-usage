@@ -36,18 +36,15 @@ def test_claude_full_payload_parses_windows_and_plan():
                 "scope": {"model": {"display_name": "Fable"}},
             },
         ],
-        "subscriptionType": "pro",
     }
     parsed = claude_reader.parse_usage(payload)
-    # The plan comes from the credentials file, never the usage payload.
-    assert parsed["plan"] == ""
-    by_id = {w["id"]: w for w in parsed["windows"]}
+    by_id = {w["id"]: w for w in parsed}
     assert by_id["fiveHour"]["usedPercent"] == 17.0
     assert by_id["fiveHour"]["resetsAt"] == "2026-11-10T21:39:59Z"
     assert by_id["weekly"]["usedPercent"] == 3.0
     # Server values above 100 are clamped like the other providers.
     over = claude_reader.parse_usage({"five_hour": {"utilization": 140.5}})
-    assert over["windows"][0]["usedPercent"] == 100.0
+    assert over[0]["usedPercent"] == 100.0
     scoped = by_id["weekly-fable"]
     assert scoped["label"] == "Weekly · Fable"
     assert scoped["usedPercent"] == 0.0
@@ -61,13 +58,13 @@ def test_claude_null_windows_tolerated():
             "limits": [],
         }
     )
-    by_id = {w["id"]: w for w in parsed["windows"]}
+    by_id = {w["id"]: w for w in parsed}
     assert by_id["fiveHour"]["usedPercent"] is None
     assert by_id["fiveHour"]["resetsAt"] is None
     assert by_id["weekly"]["usedPercent"] is None
     # Non-dict payloads and scoped entries without usable data are skipped.
-    assert claude_reader.parse_usage({})["windows"] != []
-    assert claude_reader.parse_usage(None) == {"plan": "", "windows": []}
+    assert claude_reader.parse_usage({}) != []
+    assert claude_reader.parse_usage(None) == []
 
 
 def test_claude_missing_credentials_is_hint_not_traceback():

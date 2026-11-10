@@ -15,15 +15,6 @@ import qs.Modules.Plugins
 PluginComponent {
     id: root
 
-    property double headerNowMs: Date.now()
-
-    Timer {
-        interval: 60000
-        repeat: true
-        running: true
-        onTriggered: root.headerNowMs = Date.now()
-    }
-
     readonly property real warnAt: pluginData.warnThreshold ?? 80
     readonly property real critAt: pluginData.critThreshold ?? 100
     readonly property var tc: u.clampedThresholds(root.warnAt, root.critAt)
@@ -102,9 +93,19 @@ PluginComponent {
     popoutContent: Component {
         PopoutComponent {
             headerText: "AI Usage"
-            detailsText: u.updatedText(root.snapshot?.fetchedAt, root.headerNowMs)
+            detailsText: u.updatedText(root.snapshot?.fetchedAt, popoutBody.nowMs)
 
             Column {
+                id: popoutBody
+                property double nowMs: Date.now()
+
+                Timer {
+                    interval: 60000
+                    repeat: true
+                    running: true
+                    onTriggered: popoutBody.nowMs = Date.now()
+                }
+
                 width: parent.width
                 spacing: Theme.spacingM
 
@@ -113,7 +114,7 @@ PluginComponent {
                     delegate: ProviderCard {
                         width: parent.width
                         provider: modelData
-                        nowMs: root.headerNowMs
+                        nowMs: popoutBody.nowMs
                         fetchedAt: root.snapshot?.fetchedAt ?? ""
                         warnAt: root.tc[0]
                         critAt: root.tc[1]

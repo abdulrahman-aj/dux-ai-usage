@@ -48,7 +48,9 @@ def _read_api_key(path=None):
         return None
     try:
         rows = connection.execute(
-            "SELECT value FROM credential WHERE integration_id = ?", (INTEGRATION_ID,)
+            "SELECT value FROM credential WHERE integration_id = ?"
+            " ORDER BY time_updated DESC",
+            (INTEGRATION_ID,),
         ).fetchall()
     except Exception:
         return None
