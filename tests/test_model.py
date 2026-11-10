@@ -36,7 +36,6 @@ def test_first_crossing_fires_warn_once_then_crit():
 
 
 def test_recovery_rearms_and_reset_period_clears():
-    prev = _providers([("codex", "weekly", 100.0, "R1")])
     curr = _providers([("codex", "weekly", 100.0, "R1")])
     _, notified = compute_events([], curr, {}, 80, 100)
     assert notified == {"codex/weekly": "crit"}

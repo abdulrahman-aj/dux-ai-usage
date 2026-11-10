@@ -2,8 +2,8 @@ import QtQuick
 import Quickshell.Io
 import qs.Common
 import qs.Services
+import qs.Widgets
 import qs.Modules.Plugins
-import "Format.js" as Format
 
 // Shared poller: the only surface that runs the collector. Every other
 // surface reads the snapshot from the "duxAiSnapshot" global var (seeded
@@ -127,10 +127,29 @@ PluginComponent {
         }
         var left = "soon";
         try {
-            left = "in " + Format.countdown(resetsAt);
+            left = "in " + countdown(resetsAt);
         } catch (e) {
         }
         return left;
+    }
+
+    // Inline formatting helpers (see Widget.qml): the shell caches shared
+    // QML includes, so per-surface helpers live in each surface.
+    function countdown(resetsAt, nowMs) {
+        if (!resetsAt)
+            return "";
+        var ms = new Date(resetsAt).getTime() - (nowMs ?? Date.now());
+        if (!(ms > 0))
+            return "soon";
+        var mins = Math.ceil(ms / 60000);
+        if (mins < 60)
+            return mins + "m";
+        var hours = Math.floor(mins / 60);
+        var rest = mins - hours * 60;
+        if (hours < 48)
+            return rest === 0 ? hours + "h" : hours + "h " + rest + "m";
+        var days = Math.floor(hours / 24);
+        return days + "d " + (hours - days * 24) + "h";
     }
 
     Timer {
@@ -141,16 +160,36 @@ PluginComponent {
         onTriggered: root.poll()
     }
 
-    Component.onCompleted: {
-        var saved = pluginService?.loadPluginState(pluginId, "snapshot", null) ?? null;
+    // The host injects pluginService after creation; state must load
+    // once it is present, or the first poll would run with empty
+    // prev/notified and re-fire every threshold toast. A one-shot
+    // retry timer avoids clashing with the base type's own
+    // onPluginServiceChanged handler.
+    property bool savedLoaded: false
+
+    function loadSaved() {
+        if (root.savedLoaded || !pluginService || !pluginId)
+            return;
+        root.savedLoaded = true;
+        var saved = pluginService.loadPluginState(pluginId, "snapshot", null) ?? null;
         if (saved)
             root.snapshot = saved;
-        root.notified = pluginService?.loadPluginState(pluginId, "notified", {}) ?? {};
+        root.notified = pluginService.loadPluginState(pluginId, "notified", {}) ?? {};
         if (root.snapshot)
             snapshotVar.set(root.snapshot);
         // Stagger the first poll so shell startup stays fast.
         firstPoll.start();
     }
+
+    Timer {
+        id: savedLoader
+        interval: 1000
+        repeat: true
+        running: !root.savedLoaded
+        onTriggered: root.loadSaved()
+    }
+
+    Component.onCompleted: root.loadSaved()
 
     Timer {
         id: firstPoll

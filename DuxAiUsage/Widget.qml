@@ -2,8 +2,8 @@ import QtQuick
 import qs.Common
 import qs.Services
 import qs.DCommon.Widgets
+import qs.Widgets
 import qs.Modules.Plugins
-import "Format.js" as Format
 
 // Bar pill (both orientations) + popout: per-provider compact windows,
 // colored by thresholds. One shared poller lives in Daemon.qml; this
@@ -41,7 +41,7 @@ PluginComponent {
         var worst = "ok";
         var windows = provider?.windows ?? [];
         for (var i = 0; i < windows.length; i++) {
-            var level = Format.levelOf(windows[i].usedPercent, root.warnAt, root.critAt);
+            var level = levelOf(windows[i].usedPercent, root.warnAt, root.critAt);
             if (level === "crit")
                 return "crit";
             if (level === "warn")
@@ -63,7 +63,7 @@ PluginComponent {
     }
 
     function pillText(provider) {
-        var code = Format.shortCode(provider.id, "").provider;
+        var code = shortCode(provider.id, "").provider;
         if (provider.error)
             return code + " –";
         var windows = provider.windows ?? [];
@@ -72,9 +72,79 @@ PluginComponent {
         var parts = [];
         for (var i = 0; i < windows.length; i++) {
             var w = windows[i];
-            parts.push(Format.shortCode(provider.id, w.id).window + " " + Format.pctText(w.usedPercent));
+            parts.push(shortCode(provider.id, w.id).window + " " + pctText(w.usedPercent));
         }
         return code + " " + parts.join(" · ");
+    }
+
+    function updatedText() {
+        var stamp = root.snapshot?.fetchedAt;
+        if (!stamp)
+            return "Waiting for first poll…";
+        var ago = elapsed(stamp, Date.now());
+        return ago === "just now" ? "Updated just now" : "Updated " + ago + " ago";
+    }
+
+    function countdown(resetsAt, nowMs) {
+        if (!resetsAt)
+            return "";
+        var ms = new Date(resetsAt).getTime() - (nowMs ?? Date.now());
+        if (!(ms > 0))
+            return "soon";
+        var mins = Math.ceil(ms / 60000);
+        if (mins < 60)
+            return mins + "m";
+        var hours = Math.floor(mins / 60);
+        var rest = mins - hours * 60;
+        if (hours < 48)
+            return rest === 0 ? hours + "h" : hours + "h " + rest + "m";
+        var days = Math.floor(hours / 24);
+        return days + "d " + (hours - days * 24) + "h";
+    }
+
+    // Inline formatting helpers: shared QML includes stay frozen at
+    // shell startup (the plugin cache only revision-busts manifest
+    // components), so per-surface formatting lives in each surface.
+    // Threshold and merge rules stay in collectors/model.py.
+    function shortCode(providerId, windowId) {
+        var providers = {"claude": "Cl", "codex": "Cx", "opencodeGo": "Go"};
+        var windows = {"fiveHour": "5h", "rolling": "5h", "weekly": "W",
+                       "monthly": "M", "weekly-fable": "F"};
+        return {"provider": providers[providerId] ?? providerId,
+                "window": windows[windowId] ?? windowId};
+    }
+
+    function pctText(percent) {
+        if (percent === null || percent === undefined || isNaN(percent))
+            return "–";
+        return Math.round(percent) + "%";
+    }
+
+    function levelOf(percent, warn, crit) {
+        if (percent === null || percent === undefined || isNaN(percent))
+            return "unknown";
+        if (percent >= crit)
+            return "crit";
+        if (percent >= warn)
+            return "warn";
+        return "ok";
+    }
+
+    function elapsed(isoString, nowMs) {
+        if (!isoString)
+            return "";
+        var ms = (nowMs ?? Date.now()) - new Date(isoString).getTime();
+        if (!(ms > 0))
+            return "just now";
+        var mins = Math.floor(ms / 60000);
+        if (mins < 1)
+            return "just now";
+        if (mins < 60)
+            return mins + "m";
+        var hours = Math.floor(mins / 60);
+        if (hours < 48)
+            return hours + "h";
+        return Math.floor(hours / 24) + "d";
     }
 
     horizontalBarPill: Component {
@@ -130,7 +200,7 @@ PluginComponent {
     popoutContent: Component {
         PopoutComponent {
             headerText: "AI Usage"
-            detailsText: root.snapshot?.fetchedAt ? ("Updated " + Format.countdown(root.snapshot.fetchedAt, Date.now()) + " ago") : "Waiting for first poll…"
+            detailsText: root.updatedText()
 
             Column {
                 width: parent.width
@@ -138,12 +208,140 @@ PluginComponent {
 
                 Repeater {
                     model: root.providers
-                    delegate: ProviderSection {
-                        provider: modelData
-                        warn: root.warnAt
-                        crit: root.critAt
-                        barWidth: 120
-                        openUrl: url => Qt.openUrlExternally(url)
+                    delegate: Column {
+                        // One provider block: windows with bars, banked
+                        // resets, or a one-line hint. (Duplicated per
+                        // surface: shared includes don't hot-reload.)
+                        property var provider: modelData
+                        property double nowMs: Date.now()
+
+                        function barColor(percent) {
+                            var level = root.levelOf(percent, root.warnAt, root.critAt);
+                            if (level === "crit")
+                                return Theme.error;
+                            if (level === "warn")
+                                return Theme.warning;
+                            return Theme.primary;
+                        }
+
+                        spacing: Theme.spacingS
+                        width: parent.width
+
+                        Timer {
+                            interval: 60000
+                            repeat: true
+                            running: true
+                            onTriggered: nowMs = Date.now()
+                        }
+
+                        Row {
+                            width: parent.width
+                            spacing: Theme.spacingS
+
+                            StyledText {
+                                text: provider?.name ?? ""
+                                font.pixelSize: Theme.fontSizeMedium
+                                font.weight: Theme.fontWeightMedium
+                                color: Theme.surfaceText
+                            }
+
+                            StyledText {
+                                visible: !!(provider?.plan)
+                                text: provider?.plan ?? ""
+                                font.pixelSize: Theme.fontSizeSmall
+                                color: Theme.surfaceVariantText
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+
+                            StyledText {
+                                visible: provider?.stale === true
+                                text: "· last-known"
+                                font.pixelSize: Theme.fontSizeSmall
+                                color: Theme.warning
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                        }
+
+                        StyledText {
+                            visible: !!(provider?.error)
+                            width: parent.width
+                            wrapMode: Text.WordWrap
+                            text: provider?.error?.hint ?? ""
+                            font.pixelSize: Theme.fontSizeSmall
+                            color: Theme.surfaceVariantText
+                        }
+
+                        Repeater {
+                            model: provider?.error ? [] : (provider?.windows ?? [])
+
+                            Row {
+                                spacing: Theme.spacingS
+
+                                StyledText {
+                                    width: 92
+                                    elide: Text.ElideRight
+                                    text: modelData.label ?? modelData.id
+                                    font.pixelSize: Theme.fontSizeSmall
+                                    color: Theme.surfaceText
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
+
+                                StyledRect {
+                                    width: 120
+                                    height: 8
+                                    radius: 4
+                                    color: Theme.surfaceContainerHigh
+                                    anchors.verticalCenter: parent.verticalCenter
+
+                                    StyledRect {
+                                        anchors.left: parent.left
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: parent.width * Math.min(100, Math.max(0, modelData.usedPercent ?? 0)) / 100
+                                        height: parent.height
+                                        radius: parent.radius
+                                        color: barColor(modelData.usedPercent)
+                                    }
+                                }
+
+                                StyledText {
+                                    text: root.pctText(modelData.usedPercent)
+                                    font.pixelSize: Theme.fontSizeSmall
+                                    font.weight: Theme.fontWeightMedium
+                                    color: barColor(modelData.usedPercent)
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
+
+                                StyledText {
+                                    visible: !!modelData.resetsAt
+                                    text: "↻ " + root.countdown(modelData.resetsAt, nowMs)
+                                    font.pixelSize: Theme.fontSizeSmall
+                                    color: Theme.surfaceVariantText
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
+                            }
+                        }
+
+                        Row {
+                            visible: !!(provider && provider.resets)
+                            width: parent.width
+                            spacing: Theme.spacingS
+
+                            StyledText {
+                                text: (provider?.resets?.available ?? 0) > 0 ? (provider.resets.available + (provider.resets.available === 1 ? " reset available" : " resets available")) : "No resets banked"
+                                font.pixelSize: Theme.fontSizeSmall
+                                color: Theme.surfaceVariantText
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+
+                            DButton {
+                                text: "Open usage page"
+                                iconName: "open_in_new"
+                                onClicked: {
+                                    if (provider?.resets?.url)
+                                        Qt.openUrlExternally(provider.resets.url);
+                                }
+                            }
+                        }
                     }
                 }
 

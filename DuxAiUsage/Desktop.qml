@@ -1,6 +1,7 @@
 import QtQuick
 import qs.Common
 import qs.DCommon.Widgets
+import qs.Widgets
 import qs.Modules.Plugins
 
 // Desktop widget: same data as the popout, sized by the user.
@@ -29,6 +30,55 @@ DesktopPluginComponent {
         return all.filter(p => (p.id === "claude" && root.showClaude) || (p.id === "codex" && root.showCodex) || (p.id === "opencodeGo" && root.showGo));
     }
 
+    // Inline formatting helpers (see Widget.qml): shared QML includes
+    // stay frozen at shell startup, so per-surface formatting lives here.
+    function worstOf(provider) {
+        var worst = null;
+        var windows = provider?.windows ?? [];
+        for (var i = 0; i < windows.length; i++) {
+            var pct = windows[i].usedPercent;
+            if (pct === null || pct === undefined)
+                continue;
+            if (!worst || pct > worst.usedPercent)
+                worst = windows[i];
+        }
+        return worst;
+    }
+
+    function worstText(provider) {
+        if (provider?.error)
+            return "–";
+        var worst = worstOf(provider);
+        if (!worst)
+            return "…";
+        var names = {"claude": "Cl", "codex": "Cx", "opencodeGo": "Go"};
+        var wins = {"fiveHour": "5h", "rolling": "5h", "weekly": "W",
+                    "monthly": "M", "weekly-fable": "F"};
+        return (names[provider.id] ?? provider.id) + " " + (wins[worst.id] ?? worst.id) + " " + Math.round(worst.usedPercent) + "%";
+    }
+
+    function worstLevel(provider) {
+        if (provider?.error)
+            return "unknown";
+        var worst = worstOf(provider);
+        if (!worst)
+            return "unknown";
+        if (worst.usedPercent >= root.critAt)
+            return "crit";
+        if (worst.usedPercent >= root.warnAt)
+            return "warn";
+        return "ok";
+    }
+
+    function worstColor(provider) {
+        var level = worstLevel(provider);
+        if (level === "crit")
+            return Theme.error;
+        if (level === "warn")
+            return Theme.warning;
+        return Theme.surfaceText;
+    }
+
     Rectangle {
         anchors.fill: parent
         radius: Theme.cornerRadius
@@ -50,12 +100,13 @@ DesktopPluginComponent {
 
         Repeater {
             model: root.providers
-            delegate: ProviderSection {
-                provider: modelData
-                warn: root.warnAt
-                crit: root.critAt
-                barWidth: 110
-                openUrl: url => Qt.openUrlExternally(url)
+            delegate: StyledText {
+                width: parent.width
+                elide: Text.ElideRight
+                text: root.worstText(modelData)
+                font.pixelSize: Theme.fontSizeMedium
+                font.weight: Theme.fontWeightMedium
+                color: root.worstColor(modelData)
             }
         }
 
