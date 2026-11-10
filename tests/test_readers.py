@@ -1,7 +1,12 @@
 """Parser/normalizer behavior from small recorded, fully redacted fixtures."""
 
+import json
 import os
 import sys
+import time
+from types import SimpleNamespace
+
+import pytest
 
 sys.path.insert(
     0, os.path.join(os.path.dirname(__file__), "..", "DuxAiUsage", "collectors")
@@ -38,6 +43,9 @@ def test_claude_full_payload_parses_windows_and_plan():
     assert by_id["fiveHour"]["usedPercent"] == 17.0
     assert by_id["fiveHour"]["resetsAt"] == "2026-11-10T21:39:59Z"
     assert by_id["weekly"]["usedPercent"] == 3.0
+    # Server values above 100 are clamped like the other providers.
+    over = claude_reader.parse_usage({"five_hour": {"utilization": 140.5}})
+    assert over["windows"][0]["usedPercent"] == 100.0
     scoped = by_id["weekly-fable"]
     assert scoped["label"] == "Weekly · Fable"
     assert scoped["usedPercent"] == 0.0
@@ -153,11 +161,74 @@ def test_codex_slot_order_does_not_matter_and_monthly_supported():
     assert (monthly["id"], monthly["label"]) == ("monthly", "Monthly")
 
 
-def test_codex_empty_result_is_auth_hint():
-    assert codex_reader.fetch(run=lambda: {})["error"]["kind"] == "auth"
-    assert codex_reader.fetch(run=lambda: None)["error"]["kind"] == "auth"
+def test_codex_error_mapping_distinguishes_auth_from_transient():
+    signed_out = {"error": {"code": -32600, "message": "account auth required"}}
+    assert codex_reader.fetch(run=lambda: signed_out)["error"]["kind"] == "auth"
+    failed = {"error": {"code": -32000, "message": "boom"}}
+    assert codex_reader.fetch(run=lambda: failed)["error"]["kind"] == "unavailable"
+    for bad in ({}, None, {"result": {}}, {"result": None}):
+        assert (
+            codex_reader.fetch(run=lambda bad=bad: bad)["error"]["kind"]
+            == "unavailable"
+        ), bad
     missing = codex_reader.parse_result({})
     assert missing["windows"] == [] and missing["plan"] == ""
+
+
+def test_rpc_deadline_survives_partial_line():
+    # Partial line data must not wedge the reader past the deadline.
+    r, w = os.pipe()
+    os.write(w, b'{"id":9,')
+    os.close(w)
+
+    class FakeStdin:
+        def write(self, data):
+            pass
+
+        def flush(self):
+            pass
+
+    class FakeStdout:
+        def fileno(self):
+            return r
+
+    proc = SimpleNamespace(stdin=FakeStdin(), stdout=FakeStdout())
+    start = time.monotonic()
+    try:
+        with pytest.raises(TimeoutError):
+            codex_reader._rpc(proc, 9, "x", timeout=0.6)
+    finally:
+        os.close(r)
+    assert time.monotonic() - start < 5
+
+
+def test_rpc_reads_framed_response():
+    r, w = os.pipe()
+    body = json.dumps({"id": 3, "result": {"ok": True}}) + "\n"
+    os.write(w, body.encode())
+    os.close(w)
+
+    class FakeStdin:
+        def write(self, data):
+            pass
+
+        def flush(self):
+            pass
+
+    class FakeStdout:
+        def fileno(self):
+            return r
+
+    try:
+        message = codex_reader._rpc(
+            SimpleNamespace(stdin=FakeStdin(), stdout=FakeStdout()),
+            3,
+            "x",
+            timeout=5,
+        )
+    finally:
+        os.close(r)
+    assert message == {"id": 3, "result": {"ok": True}}
 
 
 def test_go_payload_parses_all_windows():
@@ -202,6 +273,20 @@ def test_go_rate_limited_window_counts_as_exhausted():
         }
     )
     assert windows[0]["usedPercent"] == 100.0
+
+
+def test_go_rate_limited_without_percent_still_exhausted():
+    windows = go_reader.parse_usage(
+        {
+            "usage": {
+                "rolling": {
+                    "status": "rate-limited",
+                    "resetsAt": "2026-11-10T21:52:35.000Z",
+                },
+            }
+        }
+    )
+    assert [(w["id"], w["usedPercent"]) for w in windows] == [("rolling", 100.0)]
 
 
 def test_go_missing_key_is_hint():

@@ -15,7 +15,6 @@ USER_AGENT = "dux-ai-usage/0.1.0"
 TIMEOUT_SECONDS = 15
 
 CREDENTIALS_PATH = os.path.join(os.path.expanduser("~"), ".claude", ".credentials.json")
-USAGE_URL = "https://claude.ai/settings/usage"
 
 
 def _read_credentials(path=CREDENTIALS_PATH):
@@ -48,7 +47,9 @@ def _window(window_id, label, node):
     return {
         "id": window_id,
         "label": label,
-        "usedPercent": float(percent) if percent is not None else None,
+        "usedPercent": max(0.0, min(100.0, float(percent)))
+        if percent is not None
+        else None,
         "resetsAt": resets_at if isinstance(resets_at, str) else None,
     }
 

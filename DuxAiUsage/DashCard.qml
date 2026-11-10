@@ -64,10 +64,22 @@ DashCardComponent {
     // Inline formatting helpers (see Widget.qml).
     function shortCode(providerId, windowId) {
         var providers = {"claude": "Cl", "codex": "Cx", "opencodeGo": "Go"};
-        var windows = {"fiveHour": "5h", "rolling": "5h", "weekly": "W",
-                       "monthly": "M", "weekly-fable": "F"};
         return {"provider": providers[providerId] ?? providerId,
-                "window": windows[windowId] ?? windowId};
+                "window": shortWindow(windowId)};
+    }
+
+    function shortWindow(windowId) {
+        var known = {"fiveHour": "5h", "rolling": "5h", "weekly": "W",
+                     "monthly": "M", "weekly-fable": "F"};
+        if (known[windowId])
+            return known[windowId];
+        var code = "";
+        var parts = String(windowId).split(/[^a-zA-Z0-9]+/);
+        for (var i = 0; i < parts.length && code.length < 2; i++) {
+            if (parts[i].length > 0)
+                code += parts[i][0].toUpperCase();
+        }
+        return code || windowId;
     }
 
     function pctText(percent) {

@@ -11,7 +11,14 @@ import qs.Modules.Plugins
 PluginComponent {
     id: root
 
-    property var popoutService: null
+    property double headerNowMs: Date.now()
+
+    Timer {
+        interval: 60000
+        repeat: true
+        running: true
+        onTriggered: root.headerNowMs = Date.now()
+    }
 
     readonly property real warnAt: pluginData.warnThreshold ?? 80
     readonly property real critAt: pluginData.critThreshold ?? 100
@@ -81,7 +88,7 @@ PluginComponent {
         var stamp = root.snapshot?.fetchedAt;
         if (!stamp)
             return "Waiting for first poll…";
-        var ago = elapsed(stamp, Date.now());
+        var ago = elapsed(stamp, root.headerNowMs);
         return ago === "just now" ? "Updated just now" : "Updated " + ago + " ago";
     }
 
@@ -108,10 +115,25 @@ PluginComponent {
     // Threshold and merge rules stay in collectors/model.py.
     function shortCode(providerId, windowId) {
         var providers = {"claude": "Cl", "codex": "Cx", "opencodeGo": "Go"};
-        var windows = {"fiveHour": "5h", "rolling": "5h", "weekly": "W",
-                       "monthly": "M", "weekly-fable": "F"};
         return {"provider": providers[providerId] ?? providerId,
-                "window": windows[windowId] ?? windowId};
+                "window": shortWindow(windowId)};
+    }
+
+    // Unknown window ids (e.g. future Claude scoped windows beyond the
+    // observed weekly-fable) collapse to segment initials so the pill
+    // stays compact instead of leaking a long id into the bar.
+    function shortWindow(windowId) {
+        var known = {"fiveHour": "5h", "rolling": "5h", "weekly": "W",
+                     "monthly": "M", "weekly-fable": "F"};
+        if (known[windowId])
+            return known[windowId];
+        var code = "";
+        var parts = String(windowId).split(/[^a-zA-Z0-9]+/);
+        for (var i = 0; i < parts.length && code.length < 2; i++) {
+            if (parts[i].length > 0)
+                code += parts[i][0].toUpperCase();
+        }
+        return code || windowId;
     }
 
     function pctText(percent) {

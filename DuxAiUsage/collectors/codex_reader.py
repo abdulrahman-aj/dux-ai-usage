@@ -15,7 +15,6 @@ import select
 import shutil
 import subprocess
 
-USER_AGENT = "dux-ai-usage/0.1.0"
 RPC_TIMEOUT_SECONDS = 20
 USAGE_URL = "https://chatgpt.com/codex/settings/usage"
 
@@ -39,26 +38,50 @@ def runtime_env():
     return env
 
 
-def _rpc(proc, request_id, method, params=None):
+class AuthError(Exception):
+    """The CLI reports no usable ChatGPT sign-in."""
+
+
+class RpcError(Exception):
+    """The app-server call failed without proving signed-out state."""
+
+
+def _rpc(proc, request_id, method, params=None, timeout=RPC_TIMEOUT_SECONDS):
+    """Read one JSON-RPC response, bounded by an absolute deadline.
+
+    Why not select()+readline: select fires on partial line data and the
+    blocking readline then waits past the deadline. os.read with a
+    per-iteration remainder keeps the total bounded.
+    """
     proc.stdin.write(
         json.dumps({"id": request_id, "method": method, "params": params or {}}) + "\n"
     )
     proc.stdin.flush()
-    deadline = dt.datetime.now().timestamp() + RPC_TIMEOUT_SECONDS
-    while dt.datetime.now().timestamp() < deadline:
-        ready, _, _ = select.select([proc.stdout], [], [], 0.25)
+    fd = proc.stdout.fileno()
+    deadline = dt.datetime.now().timestamp() + timeout
+    buf = b""
+    while True:
+        remaining = deadline - dt.datetime.now().timestamp()
+        if remaining <= 0:
+            raise TimeoutError(method)
+        ready, _, _ = select.select([fd], [], [], min(remaining, 0.25))
         if not ready:
             continue
-        line = proc.stdout.readline()
-        if not line:
-            break
         try:
-            message = json.loads(line)
-        except ValueError:
-            continue
-        if message.get("id") == request_id:
-            return message
-    raise TimeoutError(method)
+            chunk = os.read(fd, 65536)
+        except OSError:
+            raise TimeoutError(method)
+        if not chunk:
+            raise TimeoutError(method)
+        buf += chunk
+        while b"\n" in buf:
+            line, buf = buf.split(b"\n", 1)
+            try:
+                message = json.loads(line.decode("utf-8"))
+            except ValueError:
+                continue
+            if isinstance(message, dict) and message.get("id") == request_id:
+                return message
 
 
 def iso_from_epoch(value):
@@ -142,42 +165,58 @@ def parse_result(result):
 
 
 def fetch_limits(run=None):
-    """Return the raw result dict of account/rateLimits/read."""
+    """Return the raw result dict of account/rateLimits/read.
+
+    The optional run hook (tests) returns a full JSON-RPC response
+    message so error mapping is exercised identically.
+    """
     if run is not None:
-        return run()
-    codex = shutil.which("codex", path=runtime_env()["PATH"])
-    if not codex:
-        raise FileNotFoundError("codex not found in PATH")
-    proc = subprocess.Popen(
-        [codex, "-s", "read-only", "-a", "never", "app-server"],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
-        text=True,
-        env=runtime_env(),
-    )
-    try:
-        _rpc(
-            proc,
-            1,
-            "initialize",
-            {"clientInfo": {"name": "dux-ai-usage", "version": "1"}},
+        response = run()
+    else:
+        codex = shutil.which("codex", path=runtime_env()["PATH"])
+        if not codex:
+            raise FileNotFoundError("codex not found in PATH")
+        proc = subprocess.Popen(
+            [codex, "-s", "read-only", "-a", "never", "app-server"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            env=runtime_env(),
         )
-        proc.stdin.write(json.dumps({"method": "initialized", "params": {}}) + "\n")
-        proc.stdin.flush()
-        response = _rpc(proc, 2, "account/rateLimits/read")
-    finally:
         try:
-            proc.terminate()
-            proc.wait(timeout=2)
-        except Exception:
+            _rpc(
+                proc,
+                1,
+                "initialize",
+                {"clientInfo": {"name": "dux-ai-usage", "version": "1"}},
+            )
+            proc.stdin.write(json.dumps({"method": "initialized", "params": {}}) + "\n")
+            proc.stdin.flush()
+            response = _rpc(proc, 2, "account/rateLimits/read")
+        finally:
             try:
-                proc.kill()
+                proc.terminate()
+                proc.wait(timeout=2)
             except Exception:
-                pass
-    result = (response.get("result") or {}) if isinstance(response, dict) else {}
-    if not isinstance(result, dict):
-        return {}
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+    if not isinstance(response, dict):
+        raise RpcError("non-dict app-server response")
+    error = response.get("error")
+    if isinstance(error, dict):
+        # Signed-out app-server answers -32600 "account authentication
+        # required". Any other RPC error is transient, not a login state.
+        raise (
+            AuthError(str(error.get("message") or error))
+            if error.get("code") == -32600
+            else RpcError(str(error.get("message") or error))
+        )
+    result = response.get("result")
+    if not isinstance(result, dict) or not result:
+        raise RpcError("empty account/rateLimits/read result")
     return result
 
 
@@ -200,23 +239,23 @@ def fetch(run=None):
             "hint": "Codex CLI isn't installed. Install it, then wait for the next poll.",
         }
         return provider
+    except AuthError:
+        provider["error"] = {
+            "kind": "auth",
+            "hint": "Codex isn't signed in. Run `codex login`, then wait for the next poll.",
+        }
+        return provider
     except Exception:
         provider["error"] = {
             "kind": "unavailable",
             "hint": "Codex quota is unreachable right now. Will retry next poll.",
         }
         return provider
-    if not result:
-        provider["error"] = {
-            "kind": "auth",
-            "hint": "Codex isn't signed in. Run `codex login`, then wait for the next poll.",
-        }
-        return provider
     parsed = parse_result(result)
     if not parsed["windows"]:
         provider["error"] = {
-            "kind": "auth",
-            "hint": "Codex isn't signed in. Run `codex login`, then wait for the next poll.",
+            "kind": "unavailable",
+            "hint": "Codex returned no quota windows. Will retry next poll.",
         }
         return provider
     provider["plan"] = parsed["plan"]

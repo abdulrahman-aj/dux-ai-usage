@@ -69,10 +69,11 @@ def parse_usage(payload):
         if not isinstance(node, dict):
             continue
         percent = node.get("percent")
+        if node.get("status") == "rate-limited":
+            # Exhausted window: the server percent may be absent or stale.
+            percent = 100.0
         if isinstance(percent, bool) or not isinstance(percent, (int, float)):
             continue
-        if node.get("status") == "rate-limited":
-            percent = 100.0
         resets_at = node.get("resetsAt")
         windows.append(
             {

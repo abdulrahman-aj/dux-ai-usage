@@ -13,8 +13,6 @@ import qs.Modules.Plugins
 PluginComponent {
     id: root
 
-    property var popoutService: null
-
     readonly property int pollMinutes: Math.max(2, Math.round(pluginData.pollMinutes ?? 5))
     readonly property bool enableClaude: pluginData.enableClaude ?? true
     readonly property bool enableCodex: pluginData.enableCodex ?? true
@@ -28,6 +26,7 @@ PluginComponent {
     property var notified: ({})
     property int backoffMinutes: 0
     property bool busy: false
+    property bool refreshQueued: false
 
     readonly property string collectorPath: (pluginService?.getPluginPath(pluginId) ?? "") + "/collectors/collect.py"
 
@@ -56,6 +55,11 @@ PluginComponent {
 
     function pollNow() {
         pollTimer.restart();
+        if (root.busy) {
+            // A collector run is in flight; run once more when it lands.
+            root.refreshQueued = true;
+            return;
+        }
         poll();
     }
 
@@ -63,6 +67,7 @@ PluginComponent {
         if (root.busy || !pluginService || !root.collectorPath)
             return;
         root.busy = true;
+        watchdog.restart();
         var args = ["python3", root.collectorPath, "--warn", String(root.warnAt), "--crit", String(root.critAt)];
         var disabled = root.disabledIds();
         if (disabled.length > 0)
@@ -75,16 +80,24 @@ PluginComponent {
             args.push("--notified", JSON.stringify(root.notified));
         Proc.runCommand("duxAiUsage.collect", args, (stdout, exitCode) => {
             root.busy = false;
-            if (exitCode !== 0)
+            watchdog.stop();
+            if (exitCode !== 0) {
+                // Collector failed: drop any queued refresh so a stuck
+                // backend can't spin manual retries; the timer retries.
+                root.refreshQueued = false;
                 return;
+            }
             var doc = null;
             try {
                 doc = JSON.parse(stdout);
             } catch (e) {
+                root.refreshQueued = false;
                 return;
             }
-            if (!doc || !doc.providers)
+            if (!doc || !doc.providers) {
+                root.refreshQueued = false;
                 return;
+            }
             root.snapshot = {"providers": doc.providers, "fetchedAt": doc.fetchedAt};
             root.notified = doc.notified ?? {};
             pluginService.savePluginState(pluginId, "snapshot", root.snapshot);
@@ -96,7 +109,20 @@ PluginComponent {
                 root.backoffMinutes = 0;
             if (root.toastsOn)
                 fireToasts(doc.events ?? []);
+            if (root.refreshQueued) {
+                root.refreshQueued = false;
+                poll();
+            }
         });
+    }
+
+    // If the collector hangs past every deadline, release the poll lock
+    // so surfaces keep updating; the late callback still applies cleanly.
+    Timer {
+        id: watchdog
+        interval: 120000
+        repeat: false
+        onTriggered: root.busy = false
     }
 
     function fireToasts(events) {

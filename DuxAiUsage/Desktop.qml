@@ -45,6 +45,21 @@ DesktopPluginComponent {
         return worst;
     }
 
+    // Inline formatting helpers (see Widget.qml).
+    function shortWindow(windowId) {
+        var known = {"fiveHour": "5h", "rolling": "5h", "weekly": "W",
+                     "monthly": "M", "weekly-fable": "F"};
+        if (known[windowId])
+            return known[windowId];
+        var code = "";
+        var parts = String(windowId).split(/[^a-zA-Z0-9]+/);
+        for (var i = 0; i < parts.length && code.length < 2; i++) {
+            if (parts[i].length > 0)
+                code += parts[i][0].toUpperCase();
+        }
+        return code || windowId;
+    }
+
     function worstText(provider) {
         if (provider?.error)
             return "–";
@@ -52,9 +67,7 @@ DesktopPluginComponent {
         if (!worst)
             return "…";
         var names = {"claude": "Cl", "codex": "Cx", "opencodeGo": "Go"};
-        var wins = {"fiveHour": "5h", "rolling": "5h", "weekly": "W",
-                    "monthly": "M", "weekly-fable": "F"};
-        return (names[provider.id] ?? provider.id) + " " + (wins[worst.id] ?? worst.id) + " " + Math.round(worst.usedPercent) + "%";
+        return (names[provider.id] ?? provider.id) + " " + shortWindow(worst.id) + " " + Math.round(worst.usedPercent) + "%";
     }
 
     function worstLevel(provider) {

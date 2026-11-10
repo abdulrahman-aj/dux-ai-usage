@@ -10,6 +10,15 @@ import qs.Modules.DDash
 DashTabComponent {
     id: root
 
+    property double headerNowMs: Date.now()
+
+    Timer {
+        interval: 60000
+        repeat: true
+        running: root.live
+        onTriggered: root.headerNowMs = Date.now()
+    }
+
     readonly property real warnAt: pluginData.warnThreshold ?? 80
     readonly property real critAt: pluginData.critThreshold ?? 100
     readonly property bool showClaude: pluginData.enableClaude ?? true
@@ -39,7 +48,7 @@ DashTabComponent {
         var stamp = root.snapshot?.fetchedAt;
         if (!stamp)
             return "Waiting for first poll…";
-        var ago = elapsed(stamp, Date.now());
+        var ago = elapsed(stamp, root.headerNowMs);
         return ago === "just now" ? "Updated just now" : "Updated " + ago + " ago";
     }
 
