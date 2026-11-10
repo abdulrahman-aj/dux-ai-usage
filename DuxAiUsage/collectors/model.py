@@ -192,12 +192,21 @@ def compute_events(
         del notified[key]
     # Forget windows that no longer exist (e.g. a scoped row filtered
     # out at 0%): a reappearing window refires by level, like a re-arm.
+    # Providers in a failed poll keep their state: the error carries no
+    # windows, which must not count as "vanished".
+    errored = {
+        provider.get("id")
+        for provider in (curr_providers or [])
+        if isinstance(provider, dict) and isinstance(provider.get("error"), dict)
+    }
     current_keys = {
         provider_id + "/" + window_id
         for provider_id, windows in curr.items()
         for window_id in windows
     }
-    for key in [k for k in notified if k not in current_keys]:
+    for key in [
+        k for k in notified if k not in current_keys and k.split("/")[0] not in errored
+    ]:
         del notified[key]
     return events, notified
 

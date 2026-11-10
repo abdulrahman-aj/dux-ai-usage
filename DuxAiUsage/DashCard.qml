@@ -43,7 +43,9 @@ DashCardComponent {
     readonly property var providers: u.visibleProviders(root.snapshot, root.cardSettings)
 
     // Shrink the glance entries on narrow cards so three providers fit
-    // the minimum card instead of clipping at its edges.
+    // the minimum card instead of clipping at its edges. 118px ≈ one
+    // entry's share (logo + two digits + mark) at full size; spacings
+    // stay fixed, hence the 0.62 floor keeps text legible.
     readonly property real entryScale: {
         var n = Math.max(1, root.providers.length);
         return Math.max(0.62, Math.min(1, root.width / (n * 118)));

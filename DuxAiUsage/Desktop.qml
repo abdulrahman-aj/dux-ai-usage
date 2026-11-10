@@ -101,6 +101,8 @@ DesktopPluginComponent {
 
             StyledText {
                 visible: root.providers.length === 0
+                width: parent.width
+                wrapMode: Text.WordWrap
                 text: root.snapshot ? "All providers are disabled in settings." : "Waiting for the first poll (up to a few minutes after enabling)…"
                 font.pixelSize: Theme.fontSizeSmall
                 color: Theme.surfaceVariantText

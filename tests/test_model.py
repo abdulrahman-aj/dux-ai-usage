@@ -233,3 +233,26 @@ def test_vanished_windows_forget_notified_state():
     # Reappearing at warn fires again, like a re-arm.
     events, _ = compute_events(gone, curr, notified, 80, 100)
     assert [e["level"] for e in events] == ["warn"]
+
+
+def test_errored_provider_keeps_notified_state():
+    curr = _providers([("codex", "weekly", 90.0, "R1")])
+    _, notified = compute_events([], curr, {}, 80, 100)
+    assert notified == {"codex/weekly": "warn"}
+    # Transient failure (no windows): no events, state survives.
+    failed = [
+        {
+            "id": "codex",
+            "name": "codex",
+            "error": {"kind": "unavailable", "hint": "retry"},
+            "windows": [],
+        }
+    ]
+    events, notified = compute_events(curr, failed, notified, 80, 100)
+    assert events == [] and notified == {"codex/weekly": "warn"}
+    # Recovery at the same level stays silent; escalation still fires.
+    events, notified = compute_events(failed, curr, notified, 80, 100)
+    assert events == []
+    higher = _providers([("codex", "weekly", 100.0, "R1")])
+    events, notified = compute_events(failed, higher, notified, 80, 100)
+    assert [e["level"] for e in events] == ["crit"]
