@@ -8,7 +8,7 @@ become per-provider error hints instead of tracebacks.
 Usage:
     collect.py [--prev '<snapshot json>'] [--notified '<json>']
                [--warn PCT] [--crit PCT] [--disable id,...]
-               [--only id,...] [--no-reset-notify]
+               [--no-reset-notify]
 """
 
 import argparse
@@ -16,6 +16,7 @@ import datetime as dt
 import json
 import os
 import sys
+from concurrent.futures import ThreadPoolExecutor
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -23,6 +24,7 @@ import claude_reader
 import codex_reader
 import go_reader
 from model import (
+    LONG_WINDOW,
     clamp_thresholds,
     compute_events,
     headline_window,
@@ -62,27 +64,21 @@ def main(argv=None):
     parser.add_argument(
         "--disable", default="", help="comma-separated provider ids to skip"
     )
-    parser.add_argument(
-        "--only", default="", help="comma-separated provider ids to fetch (debug)"
-    )
     parser.add_argument("--no-reset-notify", action="store_true")
     args = parser.parse_args(argv)
 
     warn, crit = clamp_thresholds(args.warn, args.crit)
     disabled = {p for p in args.disable.split(",") if p.strip()}
-    only = {p for p in args.only.split(",") if p.strip()}
     prev = _parse_json_arg(args.prev, {})
     prev_providers = prev.get("providers") if isinstance(prev, dict) else []
     prev_fetched = prev.get("fetchedAt") if isinstance(prev, dict) else None
     notified = _parse_json_arg(args.notified, {})
 
-    fresh = []
-    for provider_id, reader in READERS:
-        if provider_id in disabled:
-            continue
-        if only and provider_id not in only:
-            continue
-        fresh.append(reader())
+    # Readers run concurrently (each ~10 s max) so one slow provider
+    # cannot eat the shell's whole poll timeout; order stays READERS order.
+    wanted = [reader for provider_id, reader in READERS if provider_id not in disabled]
+    with ThreadPoolExecutor(max_workers=len(READERS)) as pool:
+        fresh = list(pool.map(lambda reader: reader(), wanted))
 
     merged, limited = merge_rate_limited(fresh, prev_providers, prev_fetched)
     for provider in merged:
@@ -91,6 +87,9 @@ def main(argv=None):
         provider["windows"] = visible_windows(provider)
         headline = headline_window(provider, warn, crit)
         provider["headlineId"] = headline.get("id") if headline else None
+        provider["headlineShort"] = bool(headline) and headline.get(
+            "id"
+        ) != LONG_WINDOW.get(provider.get("id"))
     events, new_notified = compute_events(
         prev_providers,
         merged,

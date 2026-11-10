@@ -20,7 +20,7 @@ StyledRect {
         id: u
     }
 
-    readonly property var headline: u.headlineWindow(root.provider, tc[0], tc[1])
+    readonly property var headline: u.headlineWindow(root.provider)
     readonly property string headlineLevel: u.headlineLevel(root.provider, tc[0], tc[1])
     readonly property color headlineColor: u.stateColor(root.headlineLevel)
     readonly property var tc: u.clampedThresholds(root.warnAt, root.critAt)
@@ -47,7 +47,7 @@ StyledRect {
                 id: logoIcon
                 source: u.logoFor(root.provider?.id)
                 size: 18
-                colorOverride: root.headlineColor
+                colorOverride: Theme.surfaceText
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
             }
@@ -100,7 +100,7 @@ StyledRect {
             }
 
             StyledText {
-                visible: u.isShortTakeover(root.provider) && !root.provider?.error
+                visible: (root.provider?.headlineShort === true) && !root.provider?.error
                 text: u.shortMark(root.headline?.id)
                 font.pixelSize: Theme.fontSizeSmall
                 color: root.headlineColor

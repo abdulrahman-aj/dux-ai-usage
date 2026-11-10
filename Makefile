@@ -1,8 +1,8 @@
 .PHONY: lint test
 
 lint:
-	ruff check DuxAiUsage/collectors tests
-	ruff format --check DuxAiUsage/collectors tests
+	nix develop -c ruff check DuxAiUsage/collectors tests
+	nix develop -c ruff format --check DuxAiUsage/collectors tests
 
 test:
-	python -m pytest tests/ -q
+	nix develop -c python -m pytest tests/ -q

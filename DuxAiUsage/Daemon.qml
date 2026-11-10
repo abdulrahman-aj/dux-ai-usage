@@ -27,7 +27,6 @@ PluginComponent {
     property int backoffMinutes: 0
     property bool busy: false
     property bool refreshQueued: false
-    property int pollSeq: 0
 
     readonly property string collectorPath: (pluginService?.getPluginPath(pluginId) ?? "") + "/collectors/collect.py"
 
@@ -68,9 +67,6 @@ PluginComponent {
         if (root.busy || !pluginService || !root.collectorPath)
             return;
         root.busy = true;
-        watchdog.restart();
-        root.pollSeq++;
-        var seq = root.pollSeq;
         var args = ["python3", root.collectorPath, "--warn", String(root.warnAt), "--crit", String(root.critAt)];
         var disabled = root.disabledIds();
         if (disabled.length > 0)
@@ -81,18 +77,12 @@ PluginComponent {
             args.push("--prev", JSON.stringify(root.snapshot));
         if (Object.keys(root.notified).length > 0)
             args.push("--notified", JSON.stringify(root.notified));
+        // Readers run concurrently (~10 s each worst case); 90 s covers
+        // the whole poll with headroom. Owner drops late callbacks after
+        // teardown. No watchdog: a late answer self-heals via busy/queue.
         Proc.runCommand("duxAiUsage.collect", args, (stdout, exitCode) => {
-            // Stale run (e.g. answered after the watchdog fired and a
-            // newer poll started): never apply old data over new state.
-            if (seq !== root.pollSeq)
-                return;
             root.busy = false;
-            watchdog.stop();
             if (exitCode !== 0) {
-                // Collector failed: tell the user only if they asked for
-                // this run by hand; the timer keeps retrying either way.
-                if (root.refreshQueued)
-                    ToastService.showWarning("Usage refresh failed", "Providers are unreachable right now. Will retry on schedule.");
                 root.refreshQueued = false;
                 return;
             }
@@ -122,16 +112,7 @@ PluginComponent {
                 root.refreshQueued = false;
                 poll();
             }
-        });
-    }
-
-    // If the collector hangs past every deadline, release the poll lock
-    // so surfaces keep updating; the late callback still applies cleanly.
-    Timer {
-        id: watchdog
-        interval: 120000
-        repeat: false
-        onTriggered: root.busy = false
+        }, undefined, 90000, root);
     }
 
     function fireToasts(events) {
@@ -139,9 +120,14 @@ PluginComponent {
             var event = events[i];
             var pct = (event.usedPercent === null || event.usedPercent === undefined) ? "" : (" at " + Math.round(event.usedPercent) + "%");
             var when = resetText(event);
-            if (event.level === "crit")
-                ToastService.showError(event.providerName + " " + event.windowLabel + " exhausted" + pct, "Quota window is full. It resets " + when + ".");
-            else if (event.level === "warn")
+            if (event.level === "crit") {
+                // "Exhausted" only at a genuinely full window; a lower
+                // critical threshold is "at the critical threshold".
+                if ((event.usedPercent ?? 0) >= 100)
+                    ToastService.showError(event.providerName + " " + event.windowLabel + " exhausted" + pct, "Quota window is full. It resets " + when + ".");
+                else
+                    ToastService.showError(event.providerName + " " + event.windowLabel + " at the critical threshold" + pct, "Over the critical threshold. It resets " + when + ".");
+            } else if (event.level === "warn")
                 ToastService.showWarning(event.providerName + " " + event.windowLabel + pct, "Over the warning threshold. Resets " + when + ".");
             else
                 ToastService.showInfo(event.providerName + " " + event.windowLabel + " reset", "Fresh quota window started.");
@@ -163,7 +149,8 @@ PluginComponent {
         if (!resetsAt)
             return "soon";
         try {
-            return "in " + shared.countdown(resetsAt);
+            var cd = shared.countdown(resetsAt);
+            return (!cd || cd === "soon") ? "soon" : "in " + cd;
         } catch (e) {
             return "soon";
         }

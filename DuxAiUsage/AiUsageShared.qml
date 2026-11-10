@@ -6,7 +6,8 @@ import qs.Common
 // this and calls the same functions, so color/headline/stale behavior
 // cannot drift between surfaces. The threshold and headline rules
 // themselves live in collectors/model.py (unit-tested); this file only
-// formats the snapshot collect.py annotates (headlineId, staleSince).
+// formats the snapshot collect.py annotates (headlineId,
+// headlineShort, staleSince).
 QtObject {
     id: root
 
@@ -14,14 +15,6 @@ QtObject {
     // default dark themes Theme.error is a pale salmon, which reads as
     // "info" next to amber. Critical must be unmistakable.
     readonly property color critColor: "#F44336"
-
-    // Long (default headline) window per provider. Mirrors
-    // LONG_WINDOW in collectors/model.py.
-    function longIdFor(providerId) {
-        if (providerId === "opencodeGo")
-            return "monthly";
-        return "weekly";
-    }
 
     // Clamp the two threshold sliders the same way model.py does, so a
     // pill can never color crit while the daemon toasts warn (or take
@@ -69,47 +62,25 @@ QtObject {
     }
 
     // Headline window for a provider: collect.py annotates headlineId
-    // (see model.headline_window). The fallback mirrors that rule for
-    // snapshots predating the annotation.
-    function headlineWindow(provider, warn, crit) {
+    // (see model.headline_window). No fallback: every snapshot the
+    // daemon serves carries the annotation.
+    function headlineWindow(provider) {
         var windows = provider?.windows ?? [];
-        if (windows.length === 0)
-            return null;
         var want = provider?.headlineId;
         for (var i = 0; i < windows.length; i++) {
             if (windows[i]?.id === want)
                 return windows[i];
         }
-        var longId = root.longIdFor(provider?.id);
-        var best = null;
-        for (var j = 0; j < windows.length; j++) {
-            var pct = windows[j]?.usedPercent;
-            if (pct === null || pct === undefined || isNaN(pct))
-                continue;
-            if (windows[j]?.id === longId)
-                return windows[j];
-            if (best === null || pct > best.usedPercent)
-                best = windows[j];
-        }
-        return best;
+        return null;
     }
 
     function headlineLevel(provider, warn, crit) {
-        var window = root.headlineWindow(provider, warn, crit);
+        var window = root.headlineWindow(provider);
         if (provider?.error)
             return "unknown";
         if (!window)
             return "unknown";
         return root.levelOf(window.usedPercent, warn, crit);
-    }
-
-    // True when the pill shows a short window instead of the long
-    // default, i.e. the tiny window mark is needed.
-    function isShortTakeover(provider) {
-        var id = provider?.headlineId;
-        if (!id)
-            return false;
-        return id !== root.longIdFor(provider?.id);
     }
 
     // Tiny mark identifying a short headline window ("5h", "W", "M").

@@ -8,16 +8,28 @@ auth: on 401/403 the caller is told to reconnect. Nothing is written.
 
 import json
 import os
+import pathlib
 import sqlite3
 import urllib.request
 
 BASE_URL = "https://opencode.ai"
 USAGE_PATH = "/zen/go/v1/usage"
+USAGE_URL = "https://opencode.ai/console/go"
 USER_AGENT = "dux-ai-usage/0.1.0"
-TIMEOUT_SECONDS = 15
+TIMEOUT_SECONDS = 10
 INTEGRATION_ID = "opencode-go"
 
 WINDOWS = (("rolling", "Rolling 5h"), ("weekly", "Weekly"), ("monthly", "Monthly"))
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Refuse redirects: a 3xx here must fail, never carry the key on."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+_OPENER = urllib.request.build_opener(_NoRedirect)
 
 
 def db_path():
@@ -30,7 +42,8 @@ def db_path():
 def _read_api_key(path=None):
     target = path or db_path()
     try:
-        connection = sqlite3.connect("file:%s?mode=ro" % target, uri=True, timeout=5)
+        uri = pathlib.Path(target).as_uri() + "?mode=ro"
+        connection = sqlite3.connect(uri, uri=True, timeout=5)
     except Exception:
         return None
     try:
@@ -95,6 +108,7 @@ def fetch(key=None, opener=None, path=None):
         "stale": False,
         "windows": [],
         "resets": None,
+        "usageUrl": USAGE_URL,
         "error": None,
     }
     api_key = key if isinstance(key, str) and key else _read_api_key(path)
@@ -117,7 +131,7 @@ def fetch(key=None, opener=None, path=None):
         if opener is not None:
             raw = opener(request)
         else:
-            with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
+            with _OPENER.open(request, timeout=TIMEOUT_SECONDS) as response:
                 raw = response.read()
         payload = json.loads(raw.decode("utf-8"))
     except Exception as error:  # network/HTTP/JSON: report, never raise
@@ -135,7 +149,7 @@ def fetch(key=None, opener=None, path=None):
         elif code == 429:
             provider["error"] = {
                 "kind": "rateLimited",
-                "hint": "Go usage is rate-limited right now. Retrying with last-known values.",
+                "hint": "Go usage is rate-limited right now. Will retry next poll.",
             }
         else:
             provider["error"] = {

@@ -13,15 +13,17 @@ provider::
 
     {"id": str, "name": str, "plan": str, "stale": bool,
      "staleSince": str | None, "headlineId": str | None,
-     "usageUrl": str | None,
+     "headlineShort": bool, "usageUrl": str | None,
      "windows": [{"id": str, "label": str,
                   "usedPercent": float | None, "resetsAt": str | None}],
      "resets": {"available": int, "url": str} | None,
      "error": {"kind": str, "hint": str} | None}
 
 headlineId names the window the pill and cards headline (see
-headline_window); staleSince is the fetch the last-known values came
-from, so the stale tag shows only for 429-kept values, with its age.
+headline_window); headlineShort marks a short window taking over the
+long default, so surfaces can show the tiny window mark without
+reimplementing the rule. staleSince is the fetch the last-known values came
+from, so the stale tag shows only for kept values, with its age.
 usageUrl is the provider usage page behind the quiet open link.
 
 event::
@@ -49,23 +51,10 @@ def _window_rank(window_id):
 
     Why ranks, not durations: Codex reports durations but Claude/Go do
     not, so ids are the only stable ordering key. Unknown ids rank as
-    weekly (never shorter than a long window) so a future window kind
-    cannot hijack the pill.
+    weekly so a future window kind cannot hijack the pill.
     """
     if isinstance(window_id, str):
-        if window_id in _WINDOW_RANK:
-            return _WINDOW_RANK[window_id]
-        if window_id.startswith("w"):
-            try:
-                mins = int(window_id[1:])
-            except ValueError:
-                pass
-            else:
-                if mins <= 300:
-                    return 0
-                if mins <= 10080:
-                    return 1
-                return 2
+        return _WINDOW_RANK.get(window_id, 1)
     return 1
 
 
@@ -130,14 +119,14 @@ def compute_events(
 
     Rules: an event fires once per window per upward crossing
     (ok->warn, warn->crit, ok->crit). Dropping below warn re-arms the
-    window. A changed resetsAt means a new period: notified state is
-    cleared, and an exhausted (crit-notified) window emits a "reset"
-    event when reset_notify is on. Disabled providers are skipped and
-    their notified state is dropped so re-enabling re-arms them.
+    window; a window last seen at crit emits a "reset" event then (when
+    reset_notify is on). resetsAt is deliberately ignored: rolling
+    windows move it every poll, which used to re-fire warnings.
+    Disabled providers are skipped and their notified state is dropped
+    so re-enabling re-arms them.
     """
     warn, crit = clamp_thresholds(warn, crit)
     disabled = set(disabled or ())
-    prev = _window_map(prev_providers)
     curr = _window_map(curr_providers)
     notified = dict(notified or {})
     events = []
@@ -145,7 +134,6 @@ def compute_events(
     for provider_id, windows in curr.items():
         if provider_id in disabled:
             continue
-        old_windows = prev.get(provider_id, {})
         name = _provider_name(curr_providers, provider_id)
         for window_id, window in windows.items():
             key = provider_id + "/" + window_id
@@ -153,10 +141,8 @@ def compute_events(
             if isinstance(percent, bool) or not isinstance(percent, (int, float)):
                 continue
             percent = float(percent)
-            old = old_windows.get(window_id, {})
-            old_reset = old.get("resetsAt")
-            new_reset = window.get("resetsAt")
-            if old_reset and new_reset and old_reset != new_reset:
+            rank = RANK.get(level_of(percent, warn, crit), 0)
+            if rank == 0:
                 if notified.pop(key, None) == "crit" and reset_notify:
                     events.append(
                         {
@@ -168,11 +154,6 @@ def compute_events(
                             "usedPercent": percent,
                         }
                     )
-                # New period below: fall through to level check with no
-                # notified state so a still-high window re-fires once.
-            rank = RANK.get(level_of(percent, warn, crit), 0)
-            if rank == 0:
-                notified.pop(key, None)
                 continue
             if rank > RANK.get(notified.get(key), 0):
                 level = "crit" if rank == 2 else "warn"
@@ -284,13 +265,15 @@ def headline_window(provider, warn, crit):
 
 
 def merge_rate_limited(fresh_providers, prev_providers, prev_fetched_at=None):
-    """Keep last-known windows for providers hit by HTTP 429.
+    """Keep last-known windows for rate-limited or unreachable providers.
 
     Returns (merged_providers, limited_ids). A fresh provider whose
-    error kind is "rateLimited" is replaced by its previous snapshot
-    with stale=True (keeping the original staleSince fetch time so
-    surfaces can say how old the values are); every other fresh
-    provider is kept as-is with any stale marker cleared.
+    error kind is "rateLimited" or "unavailable" is replaced by its
+    previous snapshot with stale=True (keeping the original staleSince
+    fetch time so surfaces can say how old the values are); every other
+    fresh provider is kept as-is with any stale marker cleared.
+    limited_ids (which the daemon backs off for) holds rate-limited
+    providers only: unreachable ones retry on the normal schedule.
     """
     prev = {p.get("id"): p for p in (prev_providers or []) if isinstance(p, dict)}
     merged = []
@@ -299,7 +282,7 @@ def merge_rate_limited(fresh_providers, prev_providers, prev_fetched_at=None):
         error = provider.get("error") or {}
         old = prev.get(provider.get("id"))
         if (
-            error.get("kind") == "rateLimited"
+            error.get("kind") in ("rateLimited", "unavailable")
             and isinstance(old, dict)
             and old.get("windows")
             and not (old.get("error") or {}).get("kind")
@@ -308,7 +291,8 @@ def merge_rate_limited(fresh_providers, prev_providers, prev_fetched_at=None):
             kept["stale"] = True
             kept["staleSince"] = old.get("staleSince") or prev_fetched_at
             merged.append(kept)
-            limited.append(provider.get("id"))
+            if error.get("kind") == "rateLimited":
+                limited.append(provider.get("id"))
         else:
             merged.append(provider)
     return merged, limited

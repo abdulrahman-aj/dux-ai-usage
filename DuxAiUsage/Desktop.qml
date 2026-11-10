@@ -37,17 +37,27 @@ DesktopPluginComponent {
     readonly property var snapshot: snapshotVar.value
     readonly property var providers: u.visibleProviders(root.snapshot, root.pluginData)
 
+    // Paint only as tall as the content: the window itself stays
+    // user-sized, but no empty card area hangs under short content.
+    readonly property real paintedHeight: Math.min(parent.height, body.implicitHeight + Theme.spacingM * 2)
+
     Rectangle {
-        anchors.fill: parent
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        height: root.paintedHeight
         radius: Theme.cornerRadius
         color: Theme.cardSurface ?? Theme.surfaceContainerHigh
         opacity: 0.92
     }
 
-    // Content scrolls inside the fixed rectangle (clipped) so a small
+    // Content scrolls inside the painted area (clipped) so a small
     // default size never paints cards onto the desktop.
     Flickable {
-        anchors.fill: parent
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        height: root.paintedHeight
         anchors.margins: Theme.spacingM
         clip: true
         contentWidth: width

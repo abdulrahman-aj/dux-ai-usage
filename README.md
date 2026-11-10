@@ -43,7 +43,7 @@ dms ipc call plugins reload duxAiUsage
 
 ```json
 {"fetchedAt": "...", "providers": [{"id": "...", "name": "...", "plan": "...",
- "stale": false, "headlineId": "weekly", "usageUrl": "...",
+ "stale": false, "headlineId": "weekly", "headlineShort": false, "usageUrl": "...",
  "windows": [{"id": "...", "label": "...", "usedPercent": 17.0, "resetsAt": "..."}],
  "resets": {"available": 0, "url": "..."} | null,
  "error": null | {"kind": "missing|auth|rateLimited|unavailable", "hint": "..."}}],
@@ -52,13 +52,15 @@ dms ipc call plugins reload duxAiUsage
 
 Rules:
 
-- Read-only against every account. Never writes credential files or DBs,
-  never refreshes tokens itself, never prints secrets (run with redacted
-  output only).
+- Read-only against every account. Never writes or refreshes credentials
+  itself (spawning `codex app-server` lets Codex refresh its own token
+  file, serialized by its own lock); never prints secrets (run with
+  redacted output only).
 - One shared poller: the daemon component polls; pills/cards/tabs read the
   shared snapshot. Polling is gentle (default 5 min, minimum 2 min) with
-  backoff on HTTP 429, keeping last-known values (marked stale with their
-  original fetch, so the tag shows only when actually stale, with its age).
+  backoff on HTTP 429. Rate-limited or unreachable providers keep
+  last-known values (marked stale with their original fetch, so the tag
+  shows only when actually stale, with its age).
 - The pill headlines one window per provider (long window by default; a
   shorter window at/above warn takes over; see collectors/model.py).
   Unused Claude per-model rows ("Weekly · Fable" at 0%) stay out of the
@@ -77,8 +79,9 @@ Rules:
   pill there.
 - Plugin `.js` libraries and shared `.qml` includes are cached from shell
   startup and ignore `plugins reload`; only manifest components hot-reload.
-  This plugin therefore inlines its formatting helpers per surface (the
-  threshold rules stay in one tested place: `collectors/model.py`).
+  The shared formatting helper (AiUsageShared.qml) therefore needs a shell
+  restart to pick up edits; the threshold rules stay in one tested place:
+  `collectors/model.py`.
 - The overview card slot injects `pluginId`/`pluginService` only once at
   load, which can race; the card reads the singletons directly instead.
 - External edits to `plugin_settings.json` are not re-parsed live (no

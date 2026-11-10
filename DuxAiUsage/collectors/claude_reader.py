@@ -12,10 +12,20 @@ import urllib.request
 API_URL = "https://api.anthropic.com/api/oauth/usage"
 BETA_HEADER = "oauth-2025-04-20"
 USER_AGENT = "dux-ai-usage/0.1.0"
-TIMEOUT_SECONDS = 15
+TIMEOUT_SECONDS = 10
 USAGE_URL = "https://claude.ai/settings/usage"
 
 CREDENTIALS_PATH = os.path.join(os.path.expanduser("~"), ".claude", ".credentials.json")
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Refuse redirects: a 3xx here must fail, never carry the token on."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+_OPENER = urllib.request.build_opener(_NoRedirect)
 
 
 def _read_credentials(path=CREDENTIALS_PATH):
@@ -89,12 +99,9 @@ def parse_usage(payload):
                     ),
                 }
             )
-    plan = ""
-    if isinstance(payload, dict):
-        sub = payload.get("subscriptionType")
-        if isinstance(sub, str) and sub.strip():
-            plan = sub.strip().capitalize()
-    return {"plan": plan, "windows": windows}
+    # The plan comes from the credentials file at fetch time, never
+    # from the usage payload.
+    return {"plan": "", "windows": windows}
 
 
 def fetch(token=None, opener=None, credentials_path=CREDENTIALS_PATH):
@@ -134,7 +141,7 @@ def fetch(token=None, opener=None, credentials_path=CREDENTIALS_PATH):
         if opener is not None:
             raw = opener(request)
         else:
-            with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
+            with _OPENER.open(request, timeout=TIMEOUT_SECONDS) as response:
                 raw = response.read()
         payload = json.loads(raw.decode("utf-8"))
     except Exception as error:  # network/HTTP/JSON: report, never raise
@@ -147,7 +154,7 @@ def fetch(token=None, opener=None, credentials_path=CREDENTIALS_PATH):
         elif code == 429:
             provider["error"] = {
                 "kind": "rateLimited",
-                "hint": "Claude usage is rate-limited right now. Retrying with last-known values.",
+                "hint": "Claude usage is rate-limited right now. Will retry next poll.",
             }
         else:
             provider["error"] = {

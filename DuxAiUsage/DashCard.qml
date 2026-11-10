@@ -4,7 +4,8 @@ import qs.DCommon.Widgets
 import qs.Services
 import qs.Modules.Plugins
 
-// Glanceable overview card: logo + headline number per provider.
+// Glanceable overview card: monochrome logo + headline number per
+// provider (the same PillRow as the bar pill, scaled to fit).
 // Click opens the dash tab (clickable + opensTab on the base).
 DashCardComponent {
     id: root
@@ -57,37 +58,13 @@ DashCardComponent {
 
         Repeater {
             model: root.providers
-            delegate: Row {
-                property var provider: modelData
-                readonly property var headline: u.headlineWindow(provider, root.tc[0], root.tc[1])
-                readonly property string level: u.headlineLevel(provider, root.tc[0], root.tc[1])
-
-                spacing: Theme.spacingXS
-
-                DSVGIcon {
-                    source: u.logoFor(provider?.id)
-                    size: Math.round(18 * root.entryScale)
-                    colorOverride: u.stateColor(level)
-                    anchors.verticalCenter: parent.verticalCenter
-                }
-
-                StyledText {
-                    text: provider?.error ? "–" : u.pctText(headline?.usedPercent)
-                    font.pixelSize: Math.round(Theme.fontSizeLarge * root.entryScale)
-                    font.weight: Theme.fontWeightMedium
-                    color: u.stateColor(level)
-                    anchors.verticalCenter: parent.verticalCenter
-                }
-
-                StyledText {
-                    visible: u.isShortTakeover(provider) && !provider?.error
-                    text: u.shortMark(headline?.id)
-                    font.pixelSize: Math.round(Theme.fontSizeSmall * root.entryScale)
-                    color: u.stateColor(level)
-                    opacity: 0.85
-                    anchors.top: parent.top
-                    anchors.topMargin: 2
-                }
+            delegate: PillRow {
+                provider: modelData
+                warnAt: root.tc[0]
+                critAt: root.tc[1]
+                textSize: Math.round(Theme.fontSizeLarge * root.entryScale)
+                logoColor: root.contentColor
+                anchors.verticalCenter: parent.verticalCenter
             }
         }
 

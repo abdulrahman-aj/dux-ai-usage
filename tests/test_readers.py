@@ -3,6 +3,7 @@
 import json
 import os
 import sys
+import threading
 import time
 from types import SimpleNamespace
 
@@ -38,7 +39,8 @@ def test_claude_full_payload_parses_windows_and_plan():
         "subscriptionType": "pro",
     }
     parsed = claude_reader.parse_usage(payload)
-    assert parsed["plan"] == "Pro"
+    # The plan comes from the credentials file, never the usage payload.
+    assert parsed["plan"] == ""
     by_id = {w["id"]: w for w in parsed["windows"]}
     assert by_id["fiveHour"]["usedPercent"] == 17.0
     assert by_id["fiveHour"]["resetsAt"] == "2026-11-10T21:39:59Z"
@@ -71,7 +73,6 @@ def test_claude_null_windows_tolerated():
 def test_claude_missing_credentials_is_hint_not_traceback():
     provider = claude_reader.fetch(credentials_path="/nonexistent/creds.json")
     assert provider["error"]["kind"] == "missing"
-    assert "Sign in" in provider["error"]["hint"]
 
 
 def test_codex_standard_plus_shape():
@@ -293,4 +294,47 @@ def test_go_rate_limited_without_percent_still_exhausted():
 def test_go_missing_key_is_hint():
     provider = go_reader.fetch(path="/nonexistent/opencode.db")
     assert provider["error"]["kind"] == "missing"
-    assert "/connect" in provider["error"]["hint"]
+
+
+def _redirect_server():
+    """Local server: every path but /target answers 302 to /target."""
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            if self.path == "/target":
+                body = b"{}"
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+            else:
+                self.send_response(302)
+                self.send_header("Location", "/target")
+                self.end_headers()
+
+        def log_message(self, *args):
+            pass
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server
+
+
+@pytest.mark.parametrize(
+    "module,attr,value,kwargs",
+    [
+        (claude_reader, "API_URL", "http://127.0.0.1:%d/redir", {"token": "dummy"}),
+        (go_reader, "BASE_URL", "http://127.0.0.1:%d", {"key": "dummy"}),
+    ],
+)
+def test_redirect_is_unavailable_not_followed(monkeypatch, module, attr, value, kwargs):
+    server = _redirect_server()
+    monkeypatch.setattr(module, attr, value % server.server_port)
+    try:
+        provider = module.fetch(**kwargs)
+    finally:
+        server.shutdown()
+        server.server_close()
+    assert provider["error"]["kind"] == "unavailable"

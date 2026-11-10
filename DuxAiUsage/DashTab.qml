@@ -4,7 +4,6 @@ import qs.Services
 import qs.DCommon.Widgets
 import qs.Widgets
 import qs.Modules.Plugins
-import qs.Modules.DDash
 
 // Roomy provider cards in a grid: one card per provider, filling the
 // tab width (cards wrap when narrow). Same ProviderCard component as
@@ -43,7 +42,8 @@ DashTabComponent {
     readonly property var snapshot: snapshotVar.value
     readonly property var providers: u.visibleProviders(root.snapshot, root.pluginData)
 
-    implicitHeight: Math.max(DashMetrics.tabMinHeight, content.implicitHeight + Theme.spacingL * 2)
+    // Size to the content: no reserved empty area under the cards.
+    implicitHeight: content.implicitHeight + Theme.spacingL * 2
     menuActions: [
         {
             label: "Refresh now",

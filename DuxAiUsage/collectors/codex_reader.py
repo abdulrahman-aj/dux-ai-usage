@@ -16,7 +16,7 @@ import shutil
 import subprocess
 import time
 
-RPC_TIMEOUT_SECONDS = 20
+RPC_TIMEOUT_SECONDS = 10
 USAGE_URL = "https://chatgpt.com/codex/settings/usage"
 
 # windowDurationMins -> (window id, label)
@@ -129,8 +129,7 @@ def _pick_limits(result):
     """Choose the single-workspace limits object.
 
     Prefer the 'codex' entry of rateLimitsByLimitId (the map exists for
-    future multi-pool shapes), else the top-level rateLimits, else the
-    first map entry.
+    future multi-pool shapes), else the top-level rateLimits.
     """
     if not isinstance(result, dict):
         return {}
@@ -138,9 +137,6 @@ def _pick_limits(result):
     if isinstance(by_id, dict) and by_id:
         if isinstance(by_id.get("codex"), dict):
             return by_id["codex"]
-        for value in by_id.values():
-            if isinstance(value, dict):
-                return value
     limits = result.get("rateLimits")
     return limits if isinstance(limits, dict) else {}
 

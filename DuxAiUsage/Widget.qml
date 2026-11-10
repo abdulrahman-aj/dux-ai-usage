@@ -5,8 +5,10 @@ import qs.DCommon.Widgets
 import qs.Widgets
 import qs.Modules.Plugins
 
-// Bar pill (both orientations) + popout: logo + headline number per
-// provider, colored by the shared state rule. One shared poller lives
+// Bar pill (both orientations) + popout: monochrome logo + headline
+// number per provider, the number colored by the shared state rule.
+// The popout reuses the same ProviderCard as the dash tab and desktop
+// widget. One shared poller lives
 // in Daemon.qml; this surface only reads the "duxAiSnapshot" global
 // var. Formatting lives in AiUsageShared.qml (single copy); threshold
 // and headline rules live in collectors/model.py (unit-tested).
@@ -108,117 +110,13 @@ PluginComponent {
 
                 Repeater {
                     model: root.providers
-                    delegate: Column {
-                        // One provider block: logo + headline, window
-                        // gauges, quiet/prominent usage link.
-                        property var provider: modelData
-                        property double nowMs: Date.now()
-                        readonly property var headline: u.headlineWindow(provider, root.tc[0], root.tc[1])
-                        readonly property string level: u.headlineLevel(provider, root.tc[0], root.tc[1])
-                        readonly property color state: u.stateColor(level)
-
-                        spacing: Theme.spacingS
+                    delegate: ProviderCard {
                         width: parent.width
-
-                        Timer {
-                            interval: 60000
-                            repeat: true
-                            running: true
-                            onTriggered: nowMs = Date.now()
-                        }
-
-                        Row {
-                            width: parent.width
-                            spacing: Theme.spacingS
-
-                            DSVGIcon {
-                                source: u.logoFor(provider?.id)
-                                size: 16
-                                colorOverride: state
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-
-                            StyledText {
-                                text: provider?.name ?? ""
-                                font.pixelSize: Theme.fontSizeMedium
-                                font.weight: Theme.fontWeightMedium
-                                color: Theme.surfaceText
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-
-                            StyledText {
-                                visible: !!(provider?.plan)
-                                text: provider?.plan ?? ""
-                                font.pixelSize: Theme.fontSizeSmall
-                                color: Theme.surfaceVariantText
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-
-                            StyledText {
-                                visible: u.staleText(provider, root.snapshot?.fetchedAt, nowMs) !== ""
-                                text: u.staleText(provider, root.snapshot?.fetchedAt, nowMs)
-                                font.pixelSize: Theme.fontSizeSmall
-                                color: Theme.warning
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-                        }
-
-                        Row {
-                            visible: !provider?.error && !!headline
-                            spacing: Theme.spacingXS
-
-                            StyledText {
-                                text: u.pctText(headline?.usedPercent)
-                                font.pixelSize: Theme.fontSizeLarge + 4
-                                font.weight: Theme.fontWeightMedium
-                                color: state
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-
-                            StyledText {
-                                visible: u.isShortTakeover(provider)
-                                text: u.shortMark(headline?.id)
-                                font.pixelSize: Theme.fontSizeSmall
-                                color: state
-                                opacity: 0.85
-                                anchors.top: parent.top
-                                anchors.topMargin: 2
-                            }
-
-                            StyledText {
-                                visible: !!(headline?.label)
-                                text: headline?.label ?? ""
-                                font.pixelSize: Theme.fontSizeSmall
-                                color: Theme.surfaceVariantText
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-                        }
-
-                        StyledText {
-                            visible: !!(provider?.error)
-                            width: parent.width
-                            wrapMode: Text.WordWrap
-                            text: provider?.error?.hint ?? ""
-                            font.pixelSize: Theme.fontSizeSmall
-                            color: Theme.surfaceVariantText
-                        }
-
-                        Repeater {
-                            model: provider?.error ? [] : (provider?.windows ?? [])
-
-                            WindowRow {
-                                width: parent.width
-                                win: modelData
-                                nowMs: nowMs
-                                warnAt: root.tc[0]
-                                critAt: root.tc[1]
-                            }
-                        }
-
-                        UsageRow {
-                            width: parent.width
-                            provider: parent.provider
-                        }
+                        provider: modelData
+                        nowMs: root.headerNowMs
+                        fetchedAt: root.snapshot?.fetchedAt ?? ""
+                        warnAt: root.tc[0]
+                        critAt: root.tc[1]
                     }
                 }
 

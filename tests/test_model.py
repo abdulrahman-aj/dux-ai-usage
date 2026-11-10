@@ -61,16 +61,31 @@ def test_recovery_rearms_and_reset_period_clears():
     curr = _providers([("codex", "weekly", 100.0, "R1")])
     _, notified = compute_events([], curr, {}, 80, 100)
     assert notified == {"codex/weekly": "crit"}
-    # Drop below warn: re-armed silently.
+    # Drop below warn after crit: one reset event, then re-armed.
     low = _providers([("codex", "weekly", 10.0, "R1")])
     events, notified = compute_events(curr, low, notified, 80, 100)
-    assert events == [] and notified == {}
+    assert [e["level"] for e in events] == ["reset"]
+    assert notified == {}
     # Exhaust again, then the period rolls: one reset event, re-armed.
     _, notified = compute_events(low, curr, notified, 80, 100)
     rolled = _providers([("codex", "weekly", 5.0, "R2")])
     events, notified = compute_events(curr, rolled, notified, 80, 100)
     assert [e["level"] for e in events] == ["reset"]
     assert notified == {}
+
+
+def test_moving_resets_at_does_not_refire_warn():
+    # Rolling windows (Go) move resetsAt every poll while staying high:
+    # warn fires once, not once per poll.
+    first = _providers([("opencodeGo", "rolling", 85.0, "T1")])
+    events, notified = compute_events([], first, {}, 80, 100)
+    assert [e["level"] for e in events] == ["warn"]
+    second = _providers([("opencodeGo", "rolling", 85.0, "T2")])
+    events, notified = compute_events(first, second, notified, 80, 100)
+    assert events == []
+    third = _providers([("opencodeGo", "rolling", 85.0, "T3")])
+    events, notified = compute_events(second, third, notified, 80, 100)
+    assert events == [] and notified == {"opencodeGo/rolling": "warn"}
 
 
 def test_reset_event_opt_out_and_non_exhausted_roll_silent():
@@ -117,10 +132,26 @@ def test_rate_limited_keeps_last_known_values():
     assert limited == ["claude"]
     assert merged[0]["windows"][0]["usedPercent"] == 17.0
     assert merged[0]["stale"] is True
-    # Non-429 errors pass through untouched.
+    # Auth errors pass through untouched.
     auth = [{"id": "codex", "error": {"kind": "auth", "hint": "login"}}]
     merged, limited = merge_rate_limited(auth, prev)
     assert merged == auth and limited == []
+    # Unreachable providers keep last-known values too, but without
+    # backoff: they retry on the normal schedule.
+    down = [
+        {
+            "id": "claude",
+            "name": "Claude",
+            "plan": "Pro",
+            "stale": False,
+            "windows": [],
+            "resets": None,
+            "error": {"kind": "unavailable", "hint": "retry"},
+        }
+    ]
+    merged, limited = merge_rate_limited(down, prev)
+    assert merged[0]["windows"][0]["usedPercent"] == 17.0
+    assert merged[0]["stale"] is True and limited == []
 
 
 def _headlined(provider_id, windows, warn=80, crit=100):
