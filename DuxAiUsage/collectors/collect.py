@@ -70,8 +70,8 @@ def main(argv=None):
     warn, crit = clamp_thresholds(args.warn, args.crit)
     disabled = {p.strip() for p in args.disable.split(",") if p.strip()}
     prev = _parse_json_arg(args.prev, {})
-    prev_providers = prev.get("providers") if isinstance(prev, dict) else []
-    prev_fetched = prev.get("fetchedAt") if isinstance(prev, dict) else None
+    prev_providers = prev.get("providers")
+    prev_fetched = prev.get("fetchedAt")
     notified = _parse_json_arg(args.notified, {})
 
     # Readers run concurrently (each ~10 s max) so one slow provider
@@ -95,7 +95,6 @@ def main(argv=None):
         notified,
         warn,
         crit,
-        disabled=disabled,
         reset_notify=not args.no_reset_notify,
     )
 

@@ -99,15 +99,6 @@ def test_reset_event_opt_out_and_non_exhausted_roll_silent():
     assert events == [] and notified == {}
 
 
-def test_disabled_providers_skipped_and_dropped():
-    curr = _providers([("claude", "fiveHour", 99.0, "R1")])
-    events, notified = compute_events(curr, {}, 80, 100, disabled={"claude"})
-    assert events == [] and notified == {}
-    stale = {"claude/fiveHour": "warn"}
-    _, notified = compute_events(curr, stale, 80, 100, disabled={"claude"})
-    assert notified == {}
-
-
 def test_inverted_thresholds_clamped():
     assert clamp_thresholds(90, 80) == (90.0, 91.0)
     curr = _providers([("go", "monthly", 90.5, "R1")])

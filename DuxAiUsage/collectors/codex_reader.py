@@ -173,7 +173,8 @@ def fetch_limits(run=None):
     if run is not None:
         response = run()
     else:
-        codex = shutil.which("codex", path=runtime_env()["PATH"])
+        env = runtime_env()
+        codex = shutil.which("codex", path=env["PATH"])
         if not codex:
             raise FileNotFoundError("codex not found in PATH")
         proc = subprocess.Popen(
@@ -182,7 +183,7 @@ def fetch_limits(run=None):
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             text=True,
-            env=runtime_env(),
+            env=env,
         )
         try:
             _rpc(

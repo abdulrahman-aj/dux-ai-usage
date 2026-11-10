@@ -40,16 +40,6 @@ def _read_credentials(path=CREDENTIALS_PATH):
     return oauth if isinstance(oauth, dict) else {}
 
 
-def _read_access_token(path=CREDENTIALS_PATH):
-    token = _read_credentials(path).get("accessToken")
-    return token if isinstance(token, str) and token else None
-
-
-def _read_plan(path=CREDENTIALS_PATH):
-    sub = _read_credentials(path).get("subscriptionType")
-    return sub.strip().capitalize() if isinstance(sub, str) and sub.strip() else ""
-
-
 def _window(window_id, label, node):
     percent = node.get("utilization") if isinstance(node, dict) else None
     if isinstance(percent, bool) or not isinstance(percent, (int, float)):
@@ -114,12 +104,11 @@ def fetch(token=None, opener=None, credentials_path=CREDENTIALS_PATH):
         "usageUrl": USAGE_URL,
         "error": None,
     }
+    creds = _read_credentials(credentials_path)
     access_token = (
-        token
-        if isinstance(token, str) and token
-        else _read_access_token(credentials_path)
+        token if isinstance(token, str) and token else creds.get("accessToken")
     )
-    if not access_token:
+    if not isinstance(access_token, str) or not access_token:
         provider["error"] = {
             "kind": "missing",
             "hint": "Claude Code isn't signed in here. Sign in, then wait for the next poll.",
@@ -161,7 +150,10 @@ def fetch(token=None, opener=None, credentials_path=CREDENTIALS_PATH):
             }
         return provider
     # The plan comes from the credentials file, never the usage payload.
-    provider["plan"] = _read_plan(credentials_path)
+    sub = creds.get("subscriptionType")
+    provider["plan"] = (
+        sub.strip().capitalize() if isinstance(sub, str) and sub.strip() else ""
+    )
     provider["windows"] = parse_usage(payload if isinstance(payload, dict) else {})
     # The usage payload exposes no banked-reset count, so no resets row.
     return provider

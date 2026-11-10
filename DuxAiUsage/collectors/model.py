@@ -112,9 +112,7 @@ def _provider_name(providers, provider_id):
     return provider_id
 
 
-def compute_events(
-    curr_providers, notified, warn, crit, disabled=(), reset_notify=True
-):
+def compute_events(curr_providers, notified, warn, crit, reset_notify=True):
     """Compare snapshots, returning (events, new_notified).
 
     Rules: an event fires once per window per upward crossing
@@ -122,18 +120,15 @@ def compute_events(
     window; a window last seen at crit emits a "reset" event then (when
     reset_notify is on). resetsAt is deliberately ignored: rolling
     windows move it every poll, which used to re-fire warnings.
-    Disabled providers are skipped and their notified state is dropped
-    so re-enabling re-arms them.
+    Windows that vanish (and providers that poll clean) lose their
+    notified state, so reappearing windows refire like a re-arm.
     """
     warn, crit = clamp_thresholds(warn, crit)
-    disabled = set(disabled or ())
     curr = _window_map(curr_providers)
     notified = dict(notified or {})
     events = []
 
     for provider_id, windows in curr.items():
-        if provider_id in disabled:
-            continue
         name = _provider_name(curr_providers, provider_id)
         for window_id, window in windows.items():
             key = provider_id + "/" + window_id
@@ -169,8 +164,6 @@ def compute_events(
                     }
                 )
 
-    for key in [k for k in notified if k.split("/")[0] in disabled]:
-        del notified[key]
     # Forget windows that no longer exist (e.g. a scoped row filtered
     # out at 0%): a reappearing window refires by level, like a re-arm.
     # Providers in a failed poll keep their state: the error carries no

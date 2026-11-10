@@ -36,7 +36,9 @@ Row {
     }
 
     StyledText {
-        text: root.provider?.error ? "–" : u.pctText(root.headline?.usedPercent)
+        // Error providers carry no windows, so the headline is null and
+        // this already prints "–" with no extra guard.
+        text: u.pctText(root.headline?.usedPercent)
         font.pixelSize: root.textSize
         font.weight: Theme.fontWeightMedium
         color: root.state
@@ -44,7 +46,7 @@ Row {
     }
 
     StyledText {
-        visible: (root.provider?.headlineShort === true) && !root.provider?.error
+        visible: root.provider?.headlineShort === true
         text: u.shortMark(root.headline?.id)
         font.pixelSize: Math.max(9, Math.round(root.textSize * 0.62))
         color: root.state

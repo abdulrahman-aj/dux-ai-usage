@@ -70,7 +70,7 @@ StyledRect {
                 visible: text !== ""
                 text: u.staleText(root.provider, root.fetchedAt, root.nowMs)
                 font.pixelSize: Theme.fontSizeSmall
-                color: Theme.warning
+                color: Theme.surfaceVariantText
             }
 
             StyledText {
@@ -92,7 +92,7 @@ StyledRect {
             spacing: Theme.spacingXS
 
             StyledText {
-                text: root.provider?.error ? "–" : u.pctText(root.headline?.usedPercent)
+                text: u.pctText(root.headline?.usedPercent)
                 font.pixelSize: Theme.fontSizeLarge + 8
                 font.weight: Theme.fontWeightMedium
                 color: root.headlineColor
@@ -100,7 +100,7 @@ StyledRect {
             }
 
             StyledText {
-                visible: (root.provider?.headlineShort === true) && !root.provider?.error
+                visible: root.provider?.headlineShort === true
                 text: u.shortMark(root.headline?.id)
                 font.pixelSize: Theme.fontSizeSmall
                 color: root.headlineColor
@@ -110,7 +110,7 @@ StyledRect {
             }
 
             StyledText {
-                visible: !!(root.headline?.label) && !root.provider?.error
+                visible: !!(root.headline?.label)
                 text: root.headline?.label ?? ""
                 font.pixelSize: Theme.fontSizeSmall
                 color: Theme.surfaceVariantText
