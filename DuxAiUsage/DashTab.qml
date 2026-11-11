@@ -42,8 +42,12 @@ DashTabComponent {
     readonly property var snapshot: snapshotVar.value
     readonly property var providers: u.visibleProviders(root.snapshot, root.pluginData)
 
+    // Tab padding/gaps follow density like other settings surfaces.
+    readonly property real padL: Theme.spacingL + Theme.densityStepXS
+    readonly property real gapM: Math.max(Theme.spacingS, Theme.spacingM + Theme.densityStepXS)
+
     // Size to the content: no reserved empty area under the cards.
-    implicitHeight: content.implicitHeight + Theme.spacingL * 2
+    implicitHeight: content.implicitHeight + padL * 2
     menuActions: [
         {
             label: "Refresh now",
@@ -55,11 +59,11 @@ DashTabComponent {
     Column {
         id: content
         width: parent.width
-        spacing: Theme.spacingM
+        spacing: gapM
 
         Row {
             width: parent.width
-            spacing: Theme.spacingM
+            spacing: gapM
 
             StyledText {
                 text: u.updatedText(root.snapshot?.fetchedAt, root.headerNowMs)
@@ -79,9 +83,10 @@ DashTabComponent {
         Flow {
             id: cardFlow
             width: parent.width
-            spacing: Theme.spacingM
+            spacing: gapM
 
-            readonly property int cols: width < 460 ? 1 : width < 760 ? 2 : 3
+            // Breakpoints follow density: denser fits more columns sooner.
+            readonly property int cols: width < 460 + Theme.densityStepM ? 1 : width < 760 + Theme.densityStepM ? 2 : 3
             readonly property real cardWidth: (width - (cols - 1) * spacing) / cols
 
             Repeater {

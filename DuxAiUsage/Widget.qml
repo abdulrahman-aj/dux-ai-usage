@@ -39,6 +39,8 @@ PluginComponent {
     readonly property var providers: u.visibleProviders(root.snapshot, root.pluginData)
 
     horizontalBarPill: Component {
+        // Bar-stable: fixed tokens, no density steps (the bar itself
+        // never moves with density).
         Row {
             spacing: Theme.spacingS
 
@@ -107,8 +109,11 @@ PluginComponent {
                     onTriggered: popoutBody.nowMs = Date.now()
                 }
 
+                // Popout gaps follow density like other popout surfaces.
+                readonly property real popGap: Math.max(Theme.spacingS, Theme.spacingM + Theme.densityStepS)
+
                 width: parent.width
-                spacing: Theme.spacingM
+                spacing: popGap
 
                 Repeater {
                     model: root.providers
@@ -134,5 +139,5 @@ PluginComponent {
             }
         }
     }
-    popoutWidth: 440
+    popoutWidth: 440 + Theme.densityStepM
 }

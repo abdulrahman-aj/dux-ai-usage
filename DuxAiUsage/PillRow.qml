@@ -26,11 +26,13 @@ Row {
     readonly property color state: u.stateColor(root.level)
     readonly property var tc: u.clampedThresholds(root.warnAt, root.critAt)
 
+    // Bar-stable: shared with the bar pill, so fixed tokens only and no
+    // density steps (the bar itself never moves with density).
     spacing: Theme.spacingXS
 
     DSVGIcon {
         source: u.logoFor(root.provider?.id)
-        size: Math.max(14, Math.round(root.textSize + 2))
+        size: Math.max(Theme.fontSizeSmall + Theme.spacingXXS, Math.round(root.textSize + Theme.spacingXXS))
         colorOverride: root.logoColor
         anchors.verticalCenter: parent.verticalCenter
     }
@@ -48,10 +50,10 @@ Row {
     StyledText {
         visible: root.provider?.headlineShort === true
         text: u.shortMark(root.headline?.id)
-        font.pixelSize: Math.max(9, Math.round(root.textSize * 0.62))
+        font.pixelSize: Math.max(Theme.fontSizeXSmall, Math.round(root.textSize * 0.62))
         color: root.state
         opacity: 0.85
         anchors.top: parent.top
-        anchors.topMargin: 1
+        anchors.topMargin: Theme.spacingXXS / 2
     }
 }

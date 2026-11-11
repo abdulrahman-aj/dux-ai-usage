@@ -30,15 +30,19 @@ StyledRect {
     color: Theme.cardSurface ?? Theme.surfaceContainerHigh
     radius: Theme.cornerRadius
 
-    implicitHeight: body.implicitHeight + Theme.spacingM * 2
+    // Card padding follows density like Dash contentPadding.
+    readonly property real pad: Theme.spacingM + Theme.densityStepXS
+    readonly property real gapS: Math.max(Theme.spacingXS, Theme.spacingS + Theme.densityStepXS)
+
+    implicitHeight: body.implicitHeight + pad * 2
 
     Column {
         id: body
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
-        anchors.margins: Theme.spacingM
-        spacing: Theme.spacingS
+        anchors.margins: pad
+        spacing: gapS
 
         Item {
             id: headerRow
@@ -48,7 +52,7 @@ StyledRect {
             DSVGIcon {
                 id: logoIcon
                 source: u.logoFor(root.provider?.id)
-                size: 18
+                size: Math.max(Theme.iconSizeSmall, Theme.iconSizeSmall + Theme.spacingXXS + Theme.densityStepXS)
                 colorOverride: Theme.surfaceText
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
@@ -80,7 +84,7 @@ StyledRect {
                 anchors.left: nameText.right
                 anchors.leftMargin: Theme.spacingS
                 anchors.right: staleText.left
-                anchors.rightMargin: staleText.visible ? Theme.spacingS : 0
+                anchors.rightMargin: staleText.visible ? root.gapS : 0
                 anchors.verticalCenter: parent.verticalCenter
                 visible: !!(root.provider?.plan)
                 elide: Text.ElideRight
@@ -91,11 +95,11 @@ StyledRect {
         }
 
         Row {
-            spacing: Theme.spacingXS
+            spacing: gapS
 
             StyledText {
                 text: u.pctText(root.headline?.usedPercent)
-                font.pixelSize: Theme.fontSizeLarge + 8
+                font.pixelSize: Theme.fontSizeLarge + Theme.spacingS
                 font.weight: Theme.fontWeightMedium
                 color: root.headlineColor
                 anchors.verticalCenter: parent.verticalCenter
@@ -108,7 +112,7 @@ StyledRect {
                 color: root.headlineColor
                 opacity: 0.85
                 anchors.top: parent.top
-                anchors.topMargin: 2
+                anchors.topMargin: Theme.spacingXXS
             }
 
             StyledText {

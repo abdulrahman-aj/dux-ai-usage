@@ -22,7 +22,12 @@ Item {
     readonly property string countdownText: root.win?.resetsAt ? "↻ " + u.countdown(root.win.resetsAt, root.nowMs) : ""
     readonly property color levelColor: u.stateColor(u.levelOf(root.win?.usedPercent, root.warnAt, root.critAt))
 
-    implicitHeight: topRow.height + Theme.spacingXS + bottomRow.height
+    // Track height follows density with a floor so dense never collapses.
+    readonly property real barH: Math.max(Theme.spacingXS, Theme.spacingS + Theme.densityStepXS)
+    readonly property real gapXS: Math.max(Theme.spacingXXS, Theme.spacingXS + Theme.densityStepXS)
+    readonly property real gapS: Math.max(Theme.spacingXS, Theme.spacingS + Theme.densityStepXS)
+
+    implicitHeight: topRow.height + gapXS + bottomRow.height
 
     Item {
         id: topRow
@@ -35,7 +40,7 @@ Item {
             id: labelText
             anchors.left: parent.left
             anchors.right: cdText.left
-            anchors.rightMargin: cdText.visible ? Theme.spacingS : 0
+            anchors.rightMargin: cdText.visible ? gapS : 0
             anchors.verticalCenter: parent.verticalCenter
             elide: Text.ElideRight
             text: root.win?.label ?? root.win?.id ?? ""
@@ -59,16 +64,16 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: topRow.bottom
-        anchors.topMargin: Theme.spacingXS
-        height: Math.max(pctText.implicitHeight, 10)
+        anchors.topMargin: gapXS
+        height: Math.max(pctText.implicitHeight, barH)
 
         StyledRect {
             anchors.left: parent.left
             anchors.right: pctText.left
-            anchors.rightMargin: Theme.spacingS
+            anchors.rightMargin: gapS
             anchors.verticalCenter: parent.verticalCenter
-            height: 8
-            radius: 4
+            height: barH
+            radius: barH / 2
             color: Theme.surfaceContainerHigh
 
             StyledRect {

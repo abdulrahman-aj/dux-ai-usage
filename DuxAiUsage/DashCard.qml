@@ -45,16 +45,19 @@ DashCardComponent {
 
     // Shrink the glance entries on narrow cards so three providers fit
     // the minimum card instead of clipping at its edges. 118px ≈ one
-    // entry's share (logo + two digits + mark) at full size; spacings
-    // stay fixed, hence the 0.62 floor keeps text legible.
+    // entry's share (logo + two digits + mark) at full size; the share
+    // follows density while spacings use the density-aware row gap, and
+    // the 0.62 floor keeps text legible.
+    readonly property real entryShare: 118 + Theme.densityStepM
+    readonly property real rowGap: Math.max(Theme.spacingS, Theme.spacingM + Theme.densityStepS)
     readonly property real entryScale: {
         var n = Math.max(1, root.providers.length);
-        return Math.max(0.62, Math.min(1, root.width / (n * 118)));
+        return Math.max(0.62, Math.min(1, root.width / (n * root.entryShare)));
     }
 
     Row {
         anchors.centerIn: parent
-        spacing: Theme.spacingM
+        spacing: rowGap
 
         Repeater {
             model: root.providers

@@ -6,7 +6,7 @@ import qs.DCommon.Widgets
 // filled only when resets are actually banked. The resets line shows
 // only when banked (type and expiry when present); "No resets" stays
 // quiet/omitted. Always stacked (link below the text): deterministic
-// at any card width, from a 220px desktop widget to a wide dash card.
+// at any card width, from a narrow desktop widget to a wide dash card.
 Column {
     id: root
 
@@ -22,7 +22,7 @@ Column {
     readonly property bool hasLink: u.providerLink(root.provider) !== ""
     readonly property string resetsText: u.resetsLine(root.provider, root.nowMs)
 
-    spacing: Theme.spacingXS
+    spacing: Math.max(Theme.spacingXXS, Theme.spacingXS + Theme.densityStepXS)
     visible: !!root.provider && (root.banked || root.hasLink)
 
     StyledText {
