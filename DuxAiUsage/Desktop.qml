@@ -45,6 +45,17 @@ DesktopPluginComponent {
     readonly property real minCard: 220 + Theme.densityStepM
     readonly property real smallW: 400 + Theme.densityStepM
     readonly property real smallH: 260 + Theme.densityStepM
+
+    // Headline slot fits "100%" at any fontScale (measured from the
+    // headline font, like PillRow's font-derived mark floor): a fixed
+    // token would clip at large text sizes and paint into the bars.
+    TextMetrics {
+        id: headFontMetrics
+        font.pixelSize: Theme.fontSizeMedium
+        font.weight: Theme.fontWeightMedium
+        text: "100%"
+    }
+    readonly property real headSlotW: Math.ceil(headFontMetrics.advanceWidth) + Theme.spacingXS
     // Layout follows the widget's own size directly. The size is set
     // by Dux geometry, never by content, so no feedback loop or
     // jitter is possible — like Dux's own SystemMonitorWidget, plain
@@ -85,16 +96,18 @@ DesktopPluginComponent {
     }
 
     // Content scrolls inside the painted area (clipped) so a small
-    // size never paints cards onto the desktop.
+    // size never paints cards onto the desktop. The viewport ends at
+    // the window edge when scrolling (bottom breathing room comes
+    // from the padded content height), and hugs the content when not.
     Flickable {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
-        height: root.paintedHeight
+        height: Math.min(parent.height - root.pad, body.implicitHeight + root.pad)
         anchors.margins: root.pad
         clip: true
         contentWidth: width
-        contentHeight: body.implicitHeight
+        contentHeight: body.implicitHeight + root.pad
 
         Column {
             id: body
@@ -208,10 +221,8 @@ DesktopPluginComponent {
                             anchors.leftMargin: root.gapS
                             anchors.verticalCenter: parent.verticalCenter
                             // Fixed slot keeps every provider's bars aligned.
-                            // Font-derived, so no density step (fonts never
-                            // move with density): must fit "100%" at every
-                            // density.
-                            width: Theme.buttonHeightXS + Theme.spacingXS
+                            width: root.headSlotW
+                            elide: Text.ElideRight
                             text: u.pctText(headline?.usedPercent)
                             font.pixelSize: Theme.fontSizeMedium
                             font.weight: Theme.fontWeightMedium
@@ -224,6 +235,7 @@ DesktopPluginComponent {
                             anchors.left: sHead.right
                             anchors.leftMargin: Theme.spacingXXS
                             anchors.top: parent.top
+                            anchors.topMargin: Theme.spacingXXS / 2
                             text: u.shortMark(headline?.id)
                             font.pixelSize: Math.max(Theme.fontSizeXSmall, Math.round(Theme.fontSizeMedium * 0.62))
                             color: hcolor

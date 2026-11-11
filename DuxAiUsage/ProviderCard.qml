@@ -5,8 +5,8 @@ import qs.DCommon.Widgets
 // One provider card: logo + name + plan, big headline percentage,
 // per-window gauges with reset countdowns, resets/usage row. Used by
 // the dash tab grid and the desktop widget alike (same component,
-// sized by its rectangle); the parent sets width, the card wraps or
-// stacks responsively via the shared flow columns.
+// sized by its rectangle); the parent sets width, the host lays cards
+// out in its own flow grid.
 StyledRect {
     id: root
 
