@@ -1,4 +1,4 @@
-"""Threshold-crossing and 429-reuse behavior (the toast rules)."""
+"""Threshold-crossing and 429-reuse behavior (the alert rules)."""
 
 import os
 import sys
@@ -12,6 +12,7 @@ from model import (
     compute_events,
     headline_window,
     merge_rate_limited,
+    seed_notified,
     visible_windows,
     window_visible,
 )
@@ -295,3 +296,44 @@ def test_rate_limited_flag_and_recovery():
     merged, ids = merge_rate_limited(fresh, merged)
     assert ids == [] and merged[0].get("rateLimited") is None
     assert merged[0].get("stale") is False
+
+
+def test_seed_records_current_levels_with_no_events():
+    # Startup first poll: exhausted + warning windows record silently.
+    curr = _providers(
+        [
+            ("codex", "weekly", 100.0, "R1"),
+            ("claude", "fiveHour", 85.0, "R1"),
+            ("claude", "weekly", 4.0, "R1"),
+        ]
+    )
+    assert seed_notified(curr, 80, 100) == {
+        "codex/weekly": "crit",
+        "claude/fiveHour": "warn",
+    }
+    # Non-numeric windows are skipped, not seeded.
+    broken = _providers([("codex", "weekly", 100.0, "R1")])
+    broken[0]["windows"][0]["usedPercent"] = None
+    assert seed_notified(broken, 80, 100) == {}
+
+
+def test_restart_stays_silent_then_fires_new_crossing_once():
+    curr = _providers([("codex", "weekly", 100.0, "R1")])
+    seeded = seed_notified(curr, 80, 100)
+    # Simulated restart: state round-trips through plugin storage.
+    import json
+
+    notified = json.loads(json.dumps(seeded))
+    events, notified = compute_events(curr, notified, 80, 100)
+    assert events == []
+    # A new crossing still fires exactly once.
+    low = _providers([("codex", "weekly", 10.0, "R2")])
+    events, notified = compute_events(low, notified, 80, 100)
+    assert [e["level"] for e in events] == ["reset"]
+    events, notified = compute_events(low, notified, 80, 100)
+    assert events == []
+    high = _providers([("codex", "weekly", 100.0, "R3")])
+    events, notified = compute_events(high, notified, 80, 100)
+    assert [e["level"] for e in events] == ["crit"]
+    events, _ = compute_events(high, notified, 80, 100)
+    assert events == []

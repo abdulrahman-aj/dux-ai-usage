@@ -29,6 +29,7 @@ from model import (
     compute_events,
     headline_window,
     merge_rate_limited,
+    seed_notified,
     visible_windows,
 )
 
@@ -65,6 +66,11 @@ def main(argv=None):
         "--disable", default="", help="comma-separated provider ids to skip"
     )
     parser.add_argument("--no-reset-notify", action="store_true")
+    parser.add_argument(
+        "--seed",
+        action="store_true",
+        help="startup first poll: record current levels silently, emit no events",
+    )
     args = parser.parse_args(argv)
 
     warn, crit = clamp_thresholds(args.warn, args.crit)
@@ -97,6 +103,10 @@ def main(argv=None):
         crit,
         reset_notify=not args.no_reset_notify,
     )
+    if args.seed:
+        # Startup-silent: anything already true records its level with no alert.
+        new_notified = seed_notified(merged, warn, crit)
+        events = []
 
     document = {
         "fetchedAt": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),

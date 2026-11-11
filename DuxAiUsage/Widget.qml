@@ -97,6 +97,11 @@ PluginComponent {
             id: popout
             headerText: "AI Usage"
             detailsText: u.updatedText(root.snapshot?.fetchedAt, popoutBody.nowMs)
+            headerActions: DActionButton {
+                iconName: "refresh"
+                tooltipText: "Refresh now"
+                onClicked: refreshVar.set((refreshVar.value ?? 0) + 1)
+            }
 
             Column {
                 id: popoutBody
@@ -129,12 +134,6 @@ PluginComponent {
                                 popout.closePopout();
                         }
                     }
-                }
-
-                DButton {
-                    text: "Refresh now"
-                    iconName: "refresh"
-                    onClicked: refreshVar.set((refreshVar.value ?? 0) + 1)
                 }
             }
         }

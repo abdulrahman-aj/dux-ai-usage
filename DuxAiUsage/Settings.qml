@@ -65,7 +65,7 @@ PluginSettings {
     SliderSetting {
         settingKey: "warnThreshold"
         label: "Warning at"
-        description: "Pill turns amber and a warning toast fires once per window"
+        description: "Pill turns amber once per window"
         defaultValue: 80
         minimum: 50
         maximum: 99
@@ -75,7 +75,7 @@ PluginSettings {
     SliderSetting {
         settingKey: "critThreshold"
         label: "Critical at"
-        description: "Pill turns red and a critical toast fires once per window"
+        description: "Pill turns red and a notification fires once per window"
         defaultValue: 100
         minimum: 51
         maximum: 100
@@ -84,16 +84,16 @@ PluginSettings {
 
     StyledText {
         width: parent.width
-        text: "Toasts"
+        text: "Notifications"
         font.pixelSize: Theme.fontSizeLarge
         font.weight: Theme.fontWeightMedium
         color: Theme.surfaceText
     }
 
     ToggleSetting {
-        settingKey: "toastsEnabled"
-        label: "Threshold toasts"
-        description: "Notify once per window per crossing (warning, critical)"
+        settingKey: "notificationsEnabled"
+        label: "Notifications"
+        description: "Notify once per window per crossing (critical, reset)"
         defaultValue: true
     }
 

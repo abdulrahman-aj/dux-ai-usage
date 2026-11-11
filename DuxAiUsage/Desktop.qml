@@ -1,11 +1,15 @@
 import QtQuick
 import qs.Common
+import qs.Services
 import qs.DCommon.Widgets
 import qs.Widgets
+import qs.Modules.DDash
 import qs.Modules.Plugins
 
 // Desktop widget: one component that picks its layout from its own
-// size.
+// size. Clicking it opens the AI Usage dash tab while that tab is
+// selectable (otherwise the click does nothing); Refresh and "Open
+// usage page" keep their own actions.
 //   tiny: exactly the bar pill (monochrome logo + one headline number
 //     per provider, same headline rule/state colors/mark), in a row;
 //     a column when the row does not fit. No header.
@@ -78,8 +82,25 @@ DesktopPluginComponent {
         defaultValue: null
     }
 
+    PluginGlobalVar {
+        id: refreshVar
+        varName: "duxAiRefresh"
+        defaultValue: 0
+    }
+
     readonly property var snapshot: snapshotVar.value
     readonly property var providers: u.visibleProviders(root.snapshot, root.pluginData)
+
+    // The dash tab id (DashRegistry.pluginPrefix + pluginId). Clicks
+    // open it only while it is selectable (plugin loaded and the tab
+    // enabled in Settings → Dashboard); otherwise they do nothing, so a
+    // hidden tab never yanks the user to the overview fallback.
+    readonly property bool dashAvailable: DashRegistry.isSelectable(DashRegistry.pluginPrefix + root.pluginId)
+
+    function openDashTab() {
+        if (root.dashAvailable)
+            PopoutService.openDankDash(DashRegistry.pluginPrefix + root.pluginId);
+    }
 
     // Paint only as tall as the content: the window itself stays
     // user-sized, but no empty card area hangs under short content.
@@ -93,6 +114,17 @@ DesktopPluginComponent {
         radius: Theme.cornerRadius
         color: Theme.cardSurface ?? Theme.surfaceContainerHigh
         opacity: 0.92
+
+        // Widget click opens the AI Usage dash tab (when available).
+        // Below the content, so Refresh and "Open usage page" keep
+        // their own actions; the Flickable only takes presses while it
+        // can actually scroll, otherwise clicks fall through to here.
+        MouseArea {
+            anchors.fill: parent
+            enabled: root.dashAvailable
+            cursorShape: root.dashAvailable ? Qt.PointingHandCursor : Qt.ArrowCursor
+            onClicked: root.openDashTab()
+        }
     }
 
     // Content scrolls inside the painted area (clipped) so a small
@@ -106,6 +138,7 @@ DesktopPluginComponent {
         height: Math.min(parent.height - root.pad, body.implicitHeight + root.pad)
         anchors.margins: root.pad
         clip: true
+        interactive: contentHeight > height
         contentWidth: width
         contentHeight: body.implicitHeight + root.pad
 
@@ -132,6 +165,13 @@ DesktopPluginComponent {
                     font.pixelSize: Theme.fontSizeSmall
                     color: Theme.surfaceVariantText
                     anchors.verticalCenter: parent.verticalCenter
+                }
+
+                DActionButton {
+                    iconName: "refresh"
+                    tooltipText: "Refresh now"
+                    anchors.verticalCenter: parent.verticalCenter
+                    onClicked: refreshVar.set((refreshVar.value ?? 0) + 1)
                 }
             }
 

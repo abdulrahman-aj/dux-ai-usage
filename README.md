@@ -5,7 +5,7 @@ Composite Dux shell plugin showing AI subscription usage for **Claude**
 (single workspace: the key OpenCode already stores).
 
 Surfaces: bar pill + popout, Dash tab, Dash Overview card, desktop widget,
-settings page, threshold toasts. See `DuxAiUsage/plugin.json` for the manifest.
+settings page, critical/reset notifications. See `DuxAiUsage/plugin.json` for the manifest.
 
 ## Develop
 

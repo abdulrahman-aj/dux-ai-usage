@@ -8,8 +8,9 @@ import qs.Modules.Plugins
 // Shared poller: the only surface that runs the collector. Every other
 // surface reads the snapshot from the "duxAiSnapshot" global var (seeded
 // from persisted plugin state so reloads show last-known values at once).
-// Threshold toasts fire here from the collector's events; the crossing
-// rules themselves live in collectors/model.py (unit-tested).
+// Critical/reset alerts go out as freedesktop notifications (notify-send,
+// proven live against Dux's notification centre); the crossing rules
+// themselves live in collectors/model.py (unit-tested).
 PluginComponent {
     id: root
 
@@ -19,11 +20,15 @@ PluginComponent {
     readonly property bool enableGo: pluginData.enableGo ?? true
     readonly property real warnAt: pluginData.warnThreshold ?? 80
     readonly property real critAt: pluginData.critThreshold ?? 100
-    readonly property bool toastsOn: pluginData.toastsEnabled ?? true
+    readonly property bool notificationsOn: pluginData.notificationsEnabled ?? pluginData.toastsEnabled ?? true
     readonly property bool resetNotifyOn: pluginData.resetNotify ?? true
 
     property var snapshot: null
     property var notified: ({})
+    // First successful poll after startup records current levels
+    // silently (--seed): anything already true while the shell was off
+    // must not alert, or every restart re-fires known states.
+    property bool seeded: false
     property int backoffMinutes: 0
     property bool busy: false
     property bool refreshQueued: false
@@ -73,9 +78,11 @@ PluginComponent {
             args.push("--disable", disabled.join(","));
         if (!root.resetNotifyOn)
             args.push("--no-reset-notify");
+        if (!root.seeded)
+            args.push("--seed");
         if (root.snapshot)
             args.push("--prev", JSON.stringify(root.snapshot));
-        if (Object.keys(root.notified).length > 0)
+        if (root.seeded && Object.keys(root.notified).length > 0)
             args.push("--notified", JSON.stringify(root.notified));
         // Readers run concurrently (~10 s each worst case); 90 s covers
         // the whole poll with headroom. Owner drops late callbacks after
@@ -114,11 +121,12 @@ PluginComponent {
                 "pollMinutes": root.pollMinutes
             };
             root.notified = doc.notified ?? {};
+            root.seeded = true;
             pluginService.savePluginState(pluginId, "snapshot", root.snapshot);
             pluginService.savePluginState(pluginId, "notified", root.notified);
             snapshotVar.set(root.snapshot);
-            if (root.toastsOn)
-                fireToasts(doc.events ?? []);
+            if (root.notificationsOn)
+                fireNotifications(doc.events ?? []);
             if (root.refreshQueued) {
                 root.refreshQueued = false;
                 poll();
@@ -126,22 +134,66 @@ PluginComponent {
         }, undefined, 90000, root);
     }
 
-    function fireToasts(events) {
+    // Alerts are freedesktop notifications, one per crossing: critical
+    // when a window hits its critical threshold or is blocked, reset
+    // when an exhausted window becomes usable again. Warning levels stay
+    // on the pill only. Delivery is notify-send, verified live against
+    // Dux's notification centre: -a shows the "AI Usage" name, -i the
+    // provider logo, and -A renders an "Open usage page" button whose
+    // click returns "open" to the waiting sender (critical stays up until
+    // dismissed, reset uses the normal timeout).
+    function fireNotifications(events) {
         for (var i = 0; i < events.length; i++) {
             var event = events[i];
+            if (event.level !== "crit" && event.level !== "reset")
+                continue;
+            var key = event.providerId + "/" + event.windowId;
             var pct = (event.usedPercent === null || event.usedPercent === undefined) ? "" : (" at " + Math.round(event.usedPercent) + "%");
-            var when = resetText(event);
+            var summary = "";
+            var body = "";
+            var urgency = "normal";
             if (event.level === "crit") {
+                urgency = "critical";
                 // "Exhausted" only at a genuinely full window; a lower
                 // critical threshold is "at the critical threshold".
-                if ((event.usedPercent ?? 0) >= 100)
-                    ToastService.showError(event.providerName + " " + event.windowLabel + " exhausted" + pct, "Quota window is full. It resets " + when + ".");
-                else
-                    ToastService.showError(event.providerName + " " + event.windowLabel + " at the critical threshold" + pct, "Over the critical threshold. It resets " + when + ".");
-            } else if (event.level === "warn")
-                ToastService.showWarning(event.providerName + " " + event.windowLabel + pct, "Over the warning threshold. Resets " + when + ".");
-            else
-                ToastService.showInfo(event.providerName + " " + event.windowLabel + " reset", "Fresh quota window started.");
+                if ((event.usedPercent ?? 0) >= 100) {
+                    summary = event.providerName + " " + event.windowLabel + " exhausted";
+                    body = "Quota window is full" + pct + ". It resets " + resetText(event) + ".";
+                } else {
+                    summary = event.providerName + " " + event.windowLabel + " at critical threshold";
+                    body = "Over the critical threshold" + pct + ". It resets " + resetText(event) + ".";
+                }
+            } else {
+                summary = event.providerName + " " + event.windowLabel + " reset";
+                body = "Fresh quota window started.";
+            }
+            var icon = (pluginService?.getPluginPath(pluginId) ?? "") + "/assets/" + logoAsset(event.providerId);
+            var args = ["notify-send", "-a", "AI Usage", "-i", icon, "-u", urgency, "-A", "open=Open usage page", summary, body];
+            // -A implies --wait: the click lands here as "open".
+            Proc.runCommand("duxAiUsage.notify." + key, args, (function (ev) {
+                return function (stdout, exitCode) {
+                    if ((stdout ?? "").trim() === "open")
+                        openUsagePage(ev.providerId);
+                };
+            })(event), undefined, Proc.noTimeout, root);
+        }
+    }
+
+    function logoAsset(providerId) {
+        if (providerId === "claude")
+            return "claude.svg";
+        if (providerId === "codex")
+            return "codex.svg";
+        return "opencode.svg";
+    }
+
+    function openUsagePage(providerId) {
+        var providers = root.snapshot?.providers ?? [];
+        for (var i = 0; i < providers.length; i++) {
+            if (providers[i].id === providerId && providers[i].usageUrl) {
+                Qt.openUrlExternally(providers[i].usageUrl);
+                return;
+            }
         }
     }
 

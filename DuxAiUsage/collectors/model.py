@@ -93,6 +93,30 @@ def level_of(percent, warn, crit):
     return "ok"
 
 
+def seed_notified(curr_providers, warn, crit):
+    """Notified map for everything currently true, emitting no events.
+
+    Why: the daemon passes this on its first poll after startup so a
+    window that was already exhausted while the shell was off records
+    its level silently instead of re-alerting.
+    """
+    warn, crit = clamp_thresholds(warn, crit)
+    seeded = {}
+    for provider in curr_providers or []:
+        provider_id = provider.get("id") if isinstance(provider, dict) else None
+        windows = provider.get("windows") if isinstance(provider, dict) else None
+        for window in windows or []:
+            if not isinstance(window, dict) or not window.get("id"):
+                continue
+            percent = window.get("usedPercent")
+            if isinstance(percent, bool) or not isinstance(percent, (int, float)):
+                continue
+            level = level_of(float(percent), warn, crit)
+            if level in ("warn", "crit"):
+                seeded[provider_id + "/" + window["id"]] = level
+    return seeded
+
+
 def _window_map(providers):
     """Index {providerId: {windowId: window}} for fast lookup."""
     out = {}
