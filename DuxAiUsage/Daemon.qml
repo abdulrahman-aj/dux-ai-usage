@@ -32,6 +32,18 @@ PluginComponent {
     property int backoffMinutes: 0
     property bool busy: false
     property bool refreshQueued: false
+    // Last poll start (ms): manual Refresh debounces against it so rapid
+    // clicks across the pill/popout/dash/desktop buttons cannot each burn
+    // the shared Claude token budget.
+    property double lastPollStartMs: 0
+
+    // Claude shares its OAuth token with every running Claude Code
+    // session, so the plugin refetches it at most every 10 minutes even
+    // when the user polls Codex/Go every 2: usage windows move slowly,
+    // and the collector reuses a recent Claude fetch (see
+    // collectors/model.claude_due). Manual refresh gets the same
+    // per-provider debounce for free.
+    readonly property int claudeMinMinutes: Math.max(root.pollMinutes, 10)
 
     readonly property string collectorPath: (pluginService?.getPluginPath(pluginId) ?? "") + "/collectors/collect.py"
 
@@ -59,6 +71,12 @@ PluginComponent {
     }
 
     function pollNow() {
+        // Per-provider debounce lives in the collector (Claude minimum
+        // interval); this global 60 s guard stops rapid Refresh clicks
+        // from re-polling Codex/Go either. The timer is not restarted on
+        // a debounced click so the scheduled rhythm holds.
+        if (Date.now() - root.lastPollStartMs < 60000)
+            return;
         pollTimer.restart();
         if (root.busy) {
             // A collector run is in flight; run once more when it lands.
@@ -72,7 +90,8 @@ PluginComponent {
         if (root.busy || !pluginService || !root.collectorPath)
             return;
         root.busy = true;
-        var args = ["python3", root.collectorPath, "--warn", String(root.warnAt), "--crit", String(root.critAt)];
+        root.lastPollStartMs = Date.now();
+        var args = ["python3", root.collectorPath, "--warn", String(root.warnAt), "--crit", String(root.critAt), "--claude-min-minutes", String(root.claudeMinMinutes)];
         var disabled = root.disabledIds();
         if (disabled.length > 0)
             args.push("--disable", disabled.join(","));
@@ -104,14 +123,20 @@ PluginComponent {
                 root.refreshQueued = false;
                 return;
             }
-            if (doc.limited && doc.limited.length > 0)
-                root.backoffMinutes = Math.min((root.backoffMinutes || root.pollMinutes) * 2, 30);
-            else
+            if (doc.limited && doc.limited.length > 0) {
+                // Exponential backoff, but never below the server's
+                // Retry-After hint when one was served (see
+                // model.next_backoff for the tested rule).
+                var needMinutes = 0;
+                for (var i = 0; i < doc.providers.length; i++) {
+                    var hintSec = doc.providers[i].retryAfterSec;
+                    if (hintSec > 0)
+                        needMinutes = Math.max(needMinutes, Math.ceil(hintSec / 60));
+                }
+                var grown = Math.min((root.backoffMinutes || root.pollMinutes) * 2, 30);
+                root.backoffMinutes = Math.min(Math.max(grown, needMinutes, 1), 30);
+            } else {
                 root.backoffMinutes = 0;
-            for (var i = 0; i < doc.providers.length; i++) {
-                var p = doc.providers[i];
-                if (doc.limited && doc.limited.indexOf(p.id) !== -1)
-                    p.retryInMinutes = root.backoffMinutes;
             }
             root.snapshot = {
                 "providers": doc.providers,
@@ -243,7 +268,19 @@ PluginComponent {
         root.notified = pluginService.loadPluginState(pluginId, "notified", {}) ?? {};
         if (root.snapshot)
             snapshotVar.set(root.snapshot);
-        // Stagger the first poll so shell startup stays fast.
+        // Stagger the first poll so shell startup stays fast — but when
+        // the cached snapshot is still fresh, wait out the remainder of
+        // the interval instead of refetching 15 s after every restart.
+        var delayMs = 15000;
+        try {
+            var ageMs = Date.now() - Date.parse(root.snapshot?.fetchedAt);
+            var intervalMs = root.pollMinutes * 60000;
+            if (ageMs >= 0 && ageMs < intervalMs)
+                delayMs = intervalMs - ageMs;
+        } catch (e) {
+            delayMs = 15000;
+        }
+        firstPoll.interval = delayMs;
         firstPoll.start();
     }
 

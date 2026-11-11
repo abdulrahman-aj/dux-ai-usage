@@ -11,6 +11,7 @@ import os
 import pathlib
 import sqlite3
 import urllib.request
+from email.utils import parsedate_to_datetime
 
 BASE_URL = "https://opencode.ai"
 USAGE_PATH = "/zen/go/v1/usage"
@@ -30,6 +31,49 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 _OPENER = urllib.request.build_opener(_NoRedirect)
+
+
+def _parse_retry_after(headers):
+    """Return Retry-After delay in seconds, or None (see claude_reader)."""
+    if headers is None:
+        return None
+    value = None
+    getter = getattr(headers, "get", None)
+    if callable(getter):
+        try:
+            value = getter("Retry-After")
+        except Exception:
+            value = None
+        if value is None:
+            try:
+                value = getter("retry-after")
+            except Exception:
+                value = None
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        value = str(value)
+    value = value.strip()
+    if not value:
+        return None
+    if value.isdigit():
+        return min(max(int(value), 0), 3600)
+    try:
+        when = parsedate_to_datetime(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    try:
+        import datetime as _dt
+
+        now = _dt.datetime.now(_dt.timezone.utc)
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=_dt.timezone.utc)
+        delta = (when - now).total_seconds()
+    except Exception:
+        return None
+    if delta != delta:
+        return None
+    return min(max(int(delta), 0), 3600)
 
 
 def db_path():
@@ -149,10 +193,12 @@ def fetch(key=None, opener=None, path=None):
                 "hint": "This key has no Go plan. Check the Go console page.",
             }
         elif code == 429:
-            provider["error"] = {
-                "kind": "rateLimited",
-                "hint": "Go usage is rate-limited right now. Will retry next poll.",
-            }
+            hint = "Go usage is rate-limited right now. Will retry next poll."
+            retry_after = _parse_retry_after(getattr(error, "headers", None))
+            err = {"kind": "rateLimited", "hint": hint}
+            if retry_after is not None:
+                err["retryAfter"] = retry_after
+            provider["error"] = err
         else:
             provider["error"] = {
                 "kind": "unavailable",

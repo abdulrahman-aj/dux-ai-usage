@@ -25,7 +25,6 @@ StyledRect {
     readonly property string headlineLevel: u.headlineLevel(root.provider, tc[0], tc[1])
     readonly property color headlineColor: u.stateColor(root.headlineLevel)
     readonly property var tc: u.clampedThresholds(root.warnAt, root.critAt)
-    readonly property string rateLimit: u.rateLimitText(root.provider)
 
     color: Theme.cardSurface ?? Theme.surfaceContainerHigh
     radius: Theme.cornerRadius
@@ -34,7 +33,10 @@ StyledRect {
     readonly property real pad: Theme.spacingM + Theme.densityStepXS
     readonly property real gapS: Math.max(Theme.spacingXS, Theme.spacingS + Theme.densityStepXS)
 
+    // Hug the content: no reserved empty area under the window rows.
+    // The parent Flow/Grid sizes delegates by height, so bind it.
     implicitHeight: body.implicitHeight + pad * 2
+    height: implicitHeight
 
     Column {
         id: body
@@ -47,7 +49,7 @@ StyledRect {
         Item {
             id: headerRow
             width: parent.width
-            height: Math.max(logoIcon.implicitHeight, nameText.implicitHeight, planText.implicitHeight, staleText.implicitHeight)
+            height: Math.max(logoIcon.implicitHeight, nameText.implicitHeight, planText.implicitHeight, updatedText.implicitHeight)
 
             DSVGIcon {
                 id: logoIcon
@@ -70,11 +72,11 @@ StyledRect {
             }
 
             StyledText {
-                id: staleText
+                id: updatedText
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 visible: text !== ""
-                text: u.staleText(root.provider, root.fetchedAt, root.nowMs)
+                text: u.providerUpdatedText(root.provider, root.fetchedAt, root.nowMs)
                 font.pixelSize: Theme.fontSizeSmall
                 color: Theme.surfaceVariantText
             }
@@ -83,8 +85,8 @@ StyledRect {
                 id: planText
                 anchors.left: nameText.right
                 anchors.leftMargin: Theme.spacingS
-                anchors.right: staleText.left
-                anchors.rightMargin: staleText.visible ? root.gapS : 0
+                anchors.right: updatedText.left
+                anchors.rightMargin: updatedText.visible ? root.gapS : 0
                 anchors.verticalCenter: parent.verticalCenter
                 visible: !!(root.provider?.plan)
                 elide: Text.ElideRight
@@ -131,15 +133,6 @@ StyledRect {
             text: root.provider?.error?.hint ?? ""
             font.pixelSize: Theme.fontSizeSmall
             color: Theme.surfaceVariantText
-        }
-
-        StyledText {
-            visible: root.rateLimit !== ""
-            width: parent.width
-            wrapMode: Text.WordWrap
-            text: root.rateLimit
-            font.pixelSize: Theme.fontSizeSmall
-            color: Theme.warning
         }
 
         Repeater {

@@ -8,10 +8,13 @@ sys.path.insert(
 )
 
 from model import (
+    CLAUDE_MIN_SECONDS,
     clamp_thresholds,
+    claude_due,
     compute_events,
     headline_window,
     merge_rate_limited,
+    next_backoff,
     seed_notified,
     visible_windows,
     window_visible,
@@ -337,3 +340,59 @@ def test_restart_stays_silent_then_fires_new_crossing_once():
     assert [e["level"] for e in events] == ["crit"]
     events, _ = compute_events(high, notified, 80, 100)
     assert events == []
+
+
+def test_claude_due_respects_minimum_interval():
+    assert claude_due(None, "2026-11-10T20:00:00Z") is True
+    assert claude_due("bogus", "2026-11-10T20:00:00Z") is True
+    assert claude_due("2026-11-10T20:00:00Z", "bogus") is True
+    # 9 minutes since the last good fetch with a 10-minute minimum: skip.
+    assert claude_due("2026-11-10T20:00:00Z", "2026-11-10T20:09:00Z", 600) is False
+    # Exactly at the boundary (and past it): refetch.
+    assert claude_due("2026-11-10T20:00:00Z", "2026-11-10T20:10:00Z", 600) is True
+    assert claude_due("2026-11-10T20:00:00Z", "2026-11-10T20:30:00Z", 600) is True
+    assert CLAUDE_MIN_SECONDS == 600
+
+
+def test_next_backoff_doubles_capped_and_honors_retry_after():
+    assert next_backoff(False, 0, 5) == 0
+    assert next_backoff(True, 0, 5) == 10
+    assert next_backoff(True, 10, 5) == 20
+    assert next_backoff(True, 20, 5) == 30
+    # Server hint wins over the doubling when larger, still capped at 30.
+    assert next_backoff(True, 0, 5, 1500) == 25
+    assert next_backoff(True, 0, 5, 3600) == 30
+    # A small hint never shrinks the doubling.
+    assert next_backoff(True, 10, 5, 60) == 20
+
+
+def test_merge_stamps_updated_at_and_propagates_retry_after():
+    prev = _providers([("claude", "fiveHour", 17.0, "R1")])
+    fresh = _providers([("claude", "fiveHour", 18.0, "R2")])
+    merged, limited = merge_rate_limited(fresh, prev, "P", "2026-11-10T20:00:00Z")
+    assert limited == []
+    assert merged[0].get("stale") is False
+    assert merged[0].get("updatedAt") == "2026-11-10T20:00:00Z"
+    assert "rateLimited" not in merged[0] and "retryAfterSec" not in merged[0]
+
+    limited_fresh = [
+        {
+            "id": "claude",
+            "windows": [],
+            "error": {"kind": "rateLimited", "hint": "retry", "retryAfter": 90},
+        }
+    ]
+    merged, limited = merge_rate_limited(
+        limited_fresh, prev, "2026-11-10T20:00:00Z", "2026-11-10T20:05:00Z"
+    )
+    assert limited == ["claude"]
+    assert merged[0]["windows"][0]["usedPercent"] == 17.0
+    assert merged[0]["stale"] is True
+    assert merged[0]["updatedAt"] == "2026-11-10T20:00:00Z"
+    assert merged[0]["retryAfterSec"] == 90
+
+    # First-seen 429 (no previous good values) still reports limited
+    # with the server hint for the backoff.
+    merged, limited = merge_rate_limited(limited_fresh, [], None, "NOW")
+    assert limited == ["claude"] and merged[0]["rateLimited"] is True
+    assert merged[0]["retryAfterSec"] == 90

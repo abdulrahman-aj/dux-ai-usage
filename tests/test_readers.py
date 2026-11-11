@@ -370,3 +370,64 @@ def test_claude_resets_counts_grants_and_weekly():
     assert resets["available"] == 2
     assert "Fable reset" in resets["label"] and "weekly reset" in resets["label"]
     assert resets["resetsAt"] == "2026-11-20T00:00:00Z"
+
+
+def test_retry_after_parses_seconds_and_dates():
+    assert claude_reader._parse_retry_after(None) is None
+    assert claude_reader._parse_retry_after({}) is None
+    assert claude_reader._parse_retry_after({"Retry-After": "90"}) == 90
+    assert claude_reader._parse_retry_after({"retry-after": "0"}) == 0
+    assert claude_reader._parse_retry_after({"Retry-After": "bogus"}) is None
+    assert claude_reader._parse_retry_after({"Retry-After": ""}) is None
+    assert go_reader._parse_retry_after({"Retry-After": "30"}) == 30
+    # HTTP-date in the future yields a positive delay; past dates clamp to 0.
+    import datetime as dt
+    import email.utils
+
+    future = dt.datetime.now(dt.timezone.utc) + dt.timedelta(seconds=120)
+    stamp = email.utils.format_datetime(future, usegmt=True)
+    parsed = claude_reader._parse_retry_after({"Retry-After": stamp})
+    assert parsed is not None and 0 < parsed <= 120
+    past = dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=60)
+    assert (
+        claude_reader._parse_retry_after(
+            {"Retry-After": email.utils.format_datetime(past, usegmt=True)}
+        )
+        == 0
+    )
+
+
+def _http_error(code, headers=None):
+    import urllib.error
+
+    err = urllib.error.HTTPError(
+        "https://api.anthropic.com/api/oauth/usage", code, "reason", headers, None
+    )
+    return err
+
+
+def test_claude_429_carries_retry_after_hint():
+    def opener(request):
+        raise _http_error(429, {"Retry-After": "90"})
+
+    provider = claude_reader.fetch(token="dummy", opener=opener)
+    assert provider["error"]["kind"] == "rateLimited"
+    assert provider["error"]["retryAfter"] == 90
+
+
+def test_claude_429_without_hint_has_no_retry_after():
+    def opener(request):
+        raise _http_error(429, {})
+
+    provider = claude_reader.fetch(token="dummy", opener=opener)
+    assert provider["error"]["kind"] == "rateLimited"
+    assert "retryAfter" not in provider["error"]
+
+
+def test_go_429_carries_retry_after_hint():
+    def opener(request):
+        raise _http_error(429, {"Retry-After": "45"})
+
+    provider = go_reader.fetch(key="dummy", opener=opener)
+    assert provider["error"]["kind"] == "rateLimited"
+    assert provider["error"]["retryAfter"] == 45
