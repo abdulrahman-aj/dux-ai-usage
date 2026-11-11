@@ -62,13 +62,20 @@ DashTabComponent {
 
     Component.onCompleted: seedCompactPanel()
     onEntryIdChanged: seedCompactPanel()
+    onPluginServiceChanged: seedCompactPanel()
 
+    // The host injects entryId/pluginService after load, so the seed
+    // retries until both are present. The marker lives in plugin
+    // settings (not in the absence of stored rows): the shell's "Reset
+    // panel size" clears stored rows, and must not re-trigger the seed.
     function seedCompactPanel() {
-        if (!root.entryId)
+        if (!root.entryId || !root.pluginService || !root.pluginId)
             return;
-        if ("panelRows" in DashRegistry.storedOptions(root.entryId))
+        if (root.getData("panelRowsSeeded", false))
             return;
-        DashRegistry.setOptions(root.entryId, {"panelRows": DashMetrics.minimumTabRows});
+        if (!("panelRows" in DashRegistry.storedOptions(root.entryId)))
+            DashRegistry.setOptions(root.entryId, {"panelRows": DashMetrics.minimumTabRows});
+        root.setData("panelRowsSeeded", true);
     }
 
     Column {

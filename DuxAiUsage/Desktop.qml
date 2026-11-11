@@ -7,9 +7,9 @@ import qs.Modules.DDash
 import qs.Modules.Plugins
 
 // Desktop widget: one component that picks its layout from its own
-// size. Clicking it opens the AI Usage dash tab while that tab is
-// selectable (otherwise the click does nothing); Refresh and "Open
-// usage page" keep their own actions.
+// size. Tapping it opens the AI Usage dash tab while that tab is
+// selectable (otherwise the tap does nothing); Refresh and "Open
+// usage page" keep their own actions, and dragging still scrolls.
 //   tiny: exactly the bar pill (monochrome logo + one headline number
 //     per provider, same headline rule/state colors/mark), in a row;
 //     a column when the row does not fit. No header.
@@ -116,9 +116,8 @@ DesktopPluginComponent {
         opacity: 0.92
 
         // Widget click opens the AI Usage dash tab (when available).
-        // Below the content, so Refresh and "Open usage page" keep
-        // their own actions; the Flickable only takes presses while it
-        // can actually scroll, otherwise clicks fall through to here.
+        // Below the Flickable, so it catches the padded margins; a second
+        // tap area inside the Flickable covers the content itself.
         MouseArea {
             anchors.fill: parent
             enabled: root.dashAvailable
@@ -138,9 +137,20 @@ DesktopPluginComponent {
         height: Math.min(parent.height - root.pad, body.implicitHeight + root.pad)
         anchors.margins: root.pad
         clip: true
-        interactive: contentHeight > height
         contentWidth: width
         contentHeight: body.implicitHeight + root.pad
+
+        // Tap area for the whole content: below the cards, so Refresh
+        // and "Open usage page" keep their own actions. A tap opens the
+        // dash tab; a drag still scrolls (the Flickable steals the
+        // gesture mid-move and the tap never fires).
+        MouseArea {
+            width: contentWidth
+            height: contentHeight
+            enabled: root.dashAvailable
+            cursorShape: root.dashAvailable ? Qt.PointingHandCursor : Qt.ArrowCursor
+            onClicked: root.openDashTab()
+        }
 
         Column {
             id: body

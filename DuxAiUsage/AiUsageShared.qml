@@ -92,10 +92,16 @@ QtObject {
         return "";
     }
 
+    function logoName(providerId) {
+        if (providerId === "claude")
+            return "claude";
+        if (providerId === "codex")
+            return "codex";
+        return "opencode";
+    }
+
     function logoFor(providerId) {
-        var names = {"claude": "claude", "codex": "codex", "opencodeGo": "opencode"};
-        var name = names[providerId] ?? "opencode";
-        return Qt.resolvedUrl("assets/" + name + ".svg");
+        return Qt.resolvedUrl("assets/" + logoName(providerId) + ".svg");
     }
 
     function providerLink(provider) {

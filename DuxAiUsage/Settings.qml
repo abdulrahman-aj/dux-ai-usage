@@ -91,7 +91,7 @@ PluginSettings {
     }
 
     ToggleSetting {
-        settingKey: "notificationsEnabled"
+        settingKey: "toastsEnabled"
         label: "Notifications"
         description: "Notify once per window per crossing (critical, reset)"
         defaultValue: true

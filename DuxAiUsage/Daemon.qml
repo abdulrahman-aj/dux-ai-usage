@@ -20,7 +20,7 @@ PluginComponent {
     readonly property bool enableGo: pluginData.enableGo ?? true
     readonly property real warnAt: pluginData.warnThreshold ?? 80
     readonly property real critAt: pluginData.critThreshold ?? 100
-    readonly property bool notificationsOn: pluginData.notificationsEnabled ?? pluginData.toastsEnabled ?? true
+    readonly property bool notificationsOn: pluginData.toastsEnabled ?? true
     readonly property bool resetNotifyOn: pluginData.resetNotify ?? true
 
     property var snapshot: null
@@ -135,19 +135,18 @@ PluginComponent {
     }
 
     // Alerts are freedesktop notifications, one per crossing: critical
-    // when a window hits its critical threshold or is blocked, reset
-    // when an exhausted window becomes usable again. Warning levels stay
-    // on the pill only. Delivery is notify-send, verified live against
-    // Dux's notification centre: -a shows the "AI Usage" name, -i the
+    // when a window hits its critical threshold, reset when an
+    // exhausted window becomes usable again. Warning levels stay on the
+    // pill only. Delivery is notify-send, verified live against Dux's
+    // notification centre: -a shows the "AI Usage" name, -i the
     // provider logo, and -A renders an "Open usage page" button whose
     // click returns "open" to the waiting sender (critical stays up until
     // dismissed, reset uses the normal timeout).
     function fireNotifications(events) {
         for (var i = 0; i < events.length; i++) {
-            var event = events[i];
+            let event = events[i];
             if (event.level !== "crit" && event.level !== "reset")
                 continue;
-            var key = event.providerId + "/" + event.windowId;
             var pct = (event.usedPercent === null || event.usedPercent === undefined) ? "" : (" at " + Math.round(event.usedPercent) + "%");
             var summary = "";
             var body = "";
@@ -167,24 +166,18 @@ PluginComponent {
                 summary = event.providerName + " " + event.windowLabel + " reset";
                 body = "Fresh quota window started.";
             }
-            var icon = (pluginService?.getPluginPath(pluginId) ?? "") + "/assets/" + logoAsset(event.providerId);
+            var icon = (pluginService?.getPluginPath(pluginId) ?? "") + "/assets/" + shared.logoName(event.providerId) + ".svg";
             var args = ["notify-send", "-a", "AI Usage", "-i", icon, "-u", urgency, "-A", "open=Open usage page", summary, body];
-            // -A implies --wait: the click lands here as "open".
-            Proc.runCommand("duxAiUsage.notify." + key, args, (function (ev) {
-                return function (stdout, exitCode) {
-                    if ((stdout ?? "").trim() === "open")
-                        openUsagePage(ev.providerId);
-                };
-            })(event), undefined, Proc.noTimeout, root);
+            // -A implies --wait: the click lands here as "open". No
+            // runCommand id: Proc nulls a shared id's callback when any
+            // concurrent notification completes, which would drop a
+            // later click; a random id keeps each waiter independent and
+            // is cleaned up automatically.
+            Proc.runCommand(undefined, args, function (stdout, exitCode) {
+                if ((stdout ?? "").trim() === "open")
+                    openUsagePage(event.providerId);
+            }, undefined, Proc.noTimeout, root);
         }
-    }
-
-    function logoAsset(providerId) {
-        if (providerId === "claude")
-            return "claude.svg";
-        if (providerId === "codex")
-            return "codex.svg";
-        return "opencode.svg";
     }
 
     function openUsagePage(providerId) {
