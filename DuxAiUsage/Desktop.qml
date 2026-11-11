@@ -5,17 +5,19 @@ import qs.Widgets
 import qs.Modules.Plugins
 
 // Desktop widget: one component that picks its layout from its own
-// size, with +/-8px hysteresis on every threshold so dragging across
-// a boundary never flickers.
+// size.
 //   tiny: exactly the bar pill (monochrome logo + one headline number
 //     per provider, same headline rule/state colors/mark), in a row;
-//     a column when tall and narrow. No header.
+//     a column when the row does not fit. No header.
 //   small: one compact line per provider: logo, headline number, thin
 //     bars for each window (no labels/reset text).
-//   large: the ProviderCard grid, 1-3 columns.
+//   large: the ProviderCard grid, 1–3 columns.
 // Stale/rate-limited providers show last-known values; error
 // providers headline "–" in the stale tint (unknown level) at every
-// size. Minimum size is pill-sized; the default size lands in large.
+// size. Minimum size (76x44) fits a single-provider pill; more
+// providers need ~240px of width for a row or ~100px of height for a
+// column — below that the painted area clips, like an overfull bar
+// pill. The default size lands in large.
 DesktopPluginComponent {
     id: root
 
@@ -43,49 +45,17 @@ DesktopPluginComponent {
     readonly property real minCard: 220 + Theme.densityStepM
     readonly property real smallW: 400 + Theme.densityStepM
     readonly property real smallH: 260 + Theme.densityStepM
-    // Tiny thresholds stay fixed: pill sizes never move with density.
-    property string layoutMode: "large"
-    property bool tinyVertical: false
-
-    function updateLayoutMode() {
-        var w = root.width;
-        var h = root.height;
-        if (root.layoutMode === "tiny") {
-            if (h > 88 && w > 148)
-                root.layoutMode = (w >= root.smallW + 16 && h >= root.smallH + 16) ? "large" : "small";
-        } else if (root.layoutMode === "small") {
-            if (h <= 72 || w <= 132)
-                root.layoutMode = "tiny";
-            else if (w > root.smallW + 16 && h > root.smallH + 16)
-                root.layoutMode = "large";
-        } else {
-            if (h <= 72 || w <= 132)
-                root.layoutMode = "tiny";
-            else if (w < root.smallW - 16 || h < root.smallH - 16)
-                root.layoutMode = "small";
-        }
-        if (root.tinyVertical) {
-            if (w > 168)
-                root.tinyVertical = false;
-        } else if (w <= 152) {
-            root.tinyVertical = true;
-        }
-    }
-
-    onWidthChanged: root.updateLayoutMode()
-    onHeightChanged: root.updateLayoutMode()
-
-    Component.onCompleted: {
-        var w = root.width;
-        var h = root.height;
-        if (h <= 80 || w <= 140)
-            root.layoutMode = "tiny";
-        else if (w < root.smallW || h < root.smallH)
-            root.layoutMode = "small";
-        else
-            root.layoutMode = "large";
-        root.tinyVertical = w <= 160;
-    }
+    // Layout follows the widget's own size directly. The size is set
+    // by Dux geometry, never by content, so no feedback loop or
+    // jitter is possible — like Dux's own SystemMonitorWidget, plain
+    // width/height thresholds are enough. Tiny thresholds stay fixed
+    // (pill sizes never move with density); small/large move with it.
+    // Orientation within tiny is content-derived (measured row width
+    // vs available width), so a narrow widget never clips a row
+    // mid-provider; orientation cannot feed back into the measured
+    // width, so it cannot oscillate either.
+    readonly property string layoutMode: (root.height <= 80 || root.width <= 140) ? "tiny" : (root.width < root.smallW || root.height < root.smallH) ? "small" : "large"
+    readonly property bool tinyVertical: tinyRow.implicitWidth > root.width - root.pad * 2
 
     AiUsageShared {
         id: u
@@ -152,10 +122,12 @@ DesktopPluginComponent {
                 }
             }
 
-            // Tiny: the bar pill, centered. Row normally, column when
-            // tall and narrow. (Separate Row/Column: a Flow sized to
-            // its implicitWidth collapses and wraps the pill rows.)
+            // Tiny: the bar pill, centered. Horizontal when the measured
+            // row fits, column otherwise (never a clipped row).
+            // Separate Row/Column: a Flow sized to its implicitWidth
+            // collapses and wraps the pill rows.
             Row {
+                id: tinyRow
                 visible: root.layoutMode === "tiny" && !root.tinyVertical
                 anchors.horizontalCenter: parent.horizontalCenter
                 spacing: root.gapS
@@ -171,14 +143,6 @@ DesktopPluginComponent {
                         logoColor: Theme.surfaceText
                         anchors.verticalCenter: parent.verticalCenter
                     }
-                }
-
-                StyledText {
-                    visible: root.providers.length === 0
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "AI …"
-                    font.pixelSize: Theme.fontSizeMedium
-                    color: Theme.surfaceText
                 }
             }
 
@@ -199,14 +163,14 @@ DesktopPluginComponent {
                         anchors.horizontalCenter: parent.horizontalCenter
                     }
                 }
+            }
 
-                StyledText {
-                    visible: root.providers.length === 0
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    text: "AI …"
-                    font.pixelSize: Theme.fontSizeMedium
-                    color: Theme.surfaceText
-                }
+            StyledText {
+                visible: root.layoutMode === "tiny" && root.providers.length === 0
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: "AI …"
+                font.pixelSize: Theme.fontSizeMedium
+                color: Theme.surfaceText
             }
 
             // Small: one compact line per provider. The bars reuse the
@@ -261,7 +225,7 @@ DesktopPluginComponent {
                             anchors.leftMargin: Theme.spacingXXS
                             anchors.top: parent.top
                             text: u.shortMark(headline?.id)
-                            font.pixelSize: Math.max(Theme.fontSizeXSmall + Theme.densityStepXS, Math.round(Theme.fontSizeMedium * 0.62))
+                            font.pixelSize: Math.max(Theme.fontSizeXSmall, Math.round(Theme.fontSizeMedium * 0.62))
                             color: hcolor
                             opacity: 0.85
                         }
@@ -304,8 +268,7 @@ DesktopPluginComponent {
                 width: parent.width
                 spacing: root.gapS
 
-                readonly property real minCard: root.minCard
-                readonly property int cols: Math.min(3, Math.max(1, Math.floor((width + spacing) / (minCard + spacing))))
+                readonly property int cols: Math.min(3, Math.max(1, Math.floor((width + spacing) / (root.minCard + spacing))))
                 readonly property real cardWidth: (width - (cols - 1) * spacing) / cols
 
                 Repeater {

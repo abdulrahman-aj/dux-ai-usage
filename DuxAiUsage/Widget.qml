@@ -139,5 +139,7 @@ PluginComponent {
             }
         }
     }
-    popoutWidth: 440 + Theme.densityStepM
+    // Fixed default size like Dux's own widgets (density applies to
+    // live content metrics, not to stored defaults).
+    popoutWidth: 440
 }
