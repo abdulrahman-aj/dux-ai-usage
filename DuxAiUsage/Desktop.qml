@@ -131,6 +131,7 @@ DesktopPluginComponent {
     // the window edge when scrolling (bottom breathing room comes
     // from the padded content height), and hugs the content when not.
     Flickable {
+        id: flick
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
@@ -145,8 +146,8 @@ DesktopPluginComponent {
         // dash tab; a drag still scrolls (the Flickable steals the
         // gesture mid-move and the tap never fires).
         MouseArea {
-            width: contentWidth
-            height: contentHeight
+            width: flick.contentWidth
+            height: flick.contentHeight
             enabled: root.dashAvailable
             cursorShape: root.dashAvailable ? Qt.PointingHandCursor : Qt.ArrowCursor
             onClicked: root.openDashTab()
