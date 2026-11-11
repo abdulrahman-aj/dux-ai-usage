@@ -92,6 +92,7 @@ PluginComponent {
 
     popoutContent: Component {
         PopoutComponent {
+            id: popout
             headerText: "AI Usage"
             detailsText: u.updatedText(root.snapshot?.fetchedAt, popoutBody.nowMs)
 
@@ -118,6 +119,10 @@ PluginComponent {
                         fetchedAt: root.snapshot?.fetchedAt ?? ""
                         warnAt: root.tc[0]
                         critAt: root.tc[1]
+                        onOpenUsage: function() {
+                            if (popout && typeof popout.closePopout === "function")
+                                popout.closePopout();
+                        }
                     }
                 }
 

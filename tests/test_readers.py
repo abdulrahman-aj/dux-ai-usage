@@ -335,3 +335,38 @@ def test_redirect_is_unavailable_not_followed(monkeypatch, module, attr, value, 
         server.shutdown()
         server.server_close()
     assert provider["error"]["kind"] == "unavailable"
+
+
+def test_claude_resets_none_when_nothing_banked():
+    assert claude_reader.parse_resets({}) is None
+    assert claude_reader.parse_resets(None) is None
+    empty = {
+        "cedar_ember": {"grants": []},
+        "juniper_tide": {"available": False, "resets_per_week": 1},
+    }
+    assert claude_reader.parse_resets(empty) is None
+
+
+def test_claude_resets_counts_grants_and_weekly():
+    payload = {
+        "cedar_ember": {
+            "grants": [
+                {
+                    "label": "Fable reset",
+                    "resets_left": 1,
+                    "usable_now": True,
+                    "ends_at": "2026-11-20T00:00:00Z",
+                },
+                {"label": "Spent", "resets_left": 0},
+                {"label": "Paused", "resets_left": 1, "paused": True},
+            ],
+        },
+        "juniper_tide": {
+            "available": True,
+            "next_available_at": "2026-11-18T00:00:00Z",
+        },
+    }
+    resets = claude_reader.parse_resets(payload)
+    assert resets["available"] == 2
+    assert "Fable reset" in resets["label"] and "weekly reset" in resets["label"]
+    assert resets["resetsAt"] == "2026-11-20T00:00:00Z"

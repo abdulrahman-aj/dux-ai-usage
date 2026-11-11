@@ -93,7 +93,8 @@ DesktopPluginComponent {
                 width: parent.width
                 spacing: Theme.spacingS
 
-                readonly property int cols: width < 380 ? 1 : 2
+                readonly property real minCard: 220
+                readonly property int cols: Math.min(3, Math.max(1, Math.floor((width + spacing) / (minCard + spacing))))
                 readonly property real cardWidth: (width - (cols - 1) * spacing) / cols
 
                 Repeater {

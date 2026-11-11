@@ -152,6 +152,40 @@ QtObject {
         return "Updated " + ago + " ago";
     }
 
+    // Rate-limit tag for 429-kept values: the merge keeps last-known
+    // windows with rateLimited=True (see model.merge_rate_limited) so a
+    // manual refresh is not a silent no-op. Daemon annotates
+    // retryInMinutes from its backoff; other providers still updated.
+    function rateLimitText(provider) {
+        if (provider?.rateLimited !== true)
+            return "";
+        var mins = provider?.retryInMinutes;
+        if (mins > 0)
+            return "· rate-limited, retry in " + mins + "m";
+        return "· rate-limited, will retry next poll";
+    }
+
+    // Resets line: "N reset(s) available" with type and expiry when
+    // present (Claude grants + weekly reset, Codex rateLimitResetCredits).
+    // Returns "" when nothing is banked so callers stay quiet/omitted.
+    function resetsLine(provider, nowMs) {
+        var r = provider?.resets;
+        if (!r || !(r.available > 0))
+            return "";
+        var n = r.available;
+        var out = n + (n === 1 ? " reset available" : " resets available");
+        if (r.label)
+            out += " · " + r.label;
+        if (r.resetsAt) {
+            var cd = countdown(r.resetsAt, nowMs);
+            if (cd && cd !== "soon")
+                out += " · expires in " + cd;
+            else if (cd === "soon")
+                out += " · expiring soon";
+        }
+        return out;
+    }
+
     // The last-known tag shows only for values kept from a failed/429
     // poll (provider.stale), with the age of those values.
     function staleText(provider, fetchedAt, nowMs) {

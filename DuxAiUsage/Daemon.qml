@@ -97,15 +97,26 @@ PluginComponent {
                 root.refreshQueued = false;
                 return;
             }
-            root.snapshot = {"providers": doc.providers, "fetchedAt": doc.fetchedAt};
-            root.notified = doc.notified ?? {};
-            pluginService.savePluginState(pluginId, "snapshot", root.snapshot);
-            pluginService.savePluginState(pluginId, "notified", root.notified);
-            snapshotVar.set(root.snapshot);
             if (doc.limited && doc.limited.length > 0)
                 root.backoffMinutes = Math.min((root.backoffMinutes || root.pollMinutes) * 2, 30);
             else
                 root.backoffMinutes = 0;
+            for (var i = 0; i < doc.providers.length; i++) {
+                var p = doc.providers[i];
+                if (doc.limited && doc.limited.indexOf(p.id) !== -1)
+                    p.retryInMinutes = root.backoffMinutes;
+            }
+            root.snapshot = {
+                "providers": doc.providers,
+                "fetchedAt": doc.fetchedAt,
+                "limited": doc.limited ?? [],
+                "backoffMinutes": root.backoffMinutes,
+                "pollMinutes": root.pollMinutes
+            };
+            root.notified = doc.notified ?? {};
+            pluginService.savePluginState(pluginId, "snapshot", root.snapshot);
+            pluginService.savePluginState(pluginId, "notified", root.notified);
+            snapshotVar.set(root.snapshot);
             if (root.toastsOn)
                 fireToasts(doc.events ?? []);
             if (root.refreshQueued) {

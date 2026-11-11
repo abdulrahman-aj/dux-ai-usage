@@ -10,6 +10,11 @@ import os
 import urllib.request
 
 API_URL = "https://api.anthropic.com/api/oauth/usage"
+# Read-only status query: same GET endpoint, asks the server to include
+# the reset-status blocks (cedar_ember grants + juniper_tide weekly
+# reset) that Claude Code's /usage view uses. No mutation, no extra
+# endpoint; windows keys are identical with or without it.
+STATUS_QUERY = "?at_wall=1&skip_spend=1"
 BETA_HEADER = "oauth-2025-04-20"
 USER_AGENT = "dux-ai-usage/0.1.0"
 TIMEOUT_SECONDS = 10
@@ -92,6 +97,81 @@ def parse_usage(payload):
     return windows
 
 
+def _resets_left(grant):
+    value = grant.get("resets_left")
+    if isinstance(value, bool):
+        return 0
+    if isinstance(value, int) and value > 0:
+        return value
+    if isinstance(value, float) and value > 0:
+        return int(value)
+    return 0
+
+
+def _grant_usable(grant):
+    if grant.get("paused") is True or grant.get("usable_now") is False:
+        return False
+    return True
+
+
+def parse_resets(payload):
+    """Count banked Claude resets from the read-only status blocks.
+
+    cedar_ember.grants holds per-grant resets_left (e.g. a Fable grant);
+    juniper_tide.available marks the weekly full reset. Returns None when
+    nothing is banked so the row stays quiet, else {"available", "url",
+    "label"?, "resetsAt"?}. Tolerant of missing blocks/keys.
+    """
+    if not isinstance(payload, dict):
+        return None
+    cedar = payload.get("cedar_ember")
+    juniper = payload.get("juniper_tide")
+    grants = []
+    if isinstance(cedar, dict) and isinstance(cedar.get("grants"), list):
+        for entry in cedar["grants"]:
+            if not isinstance(entry, dict):
+                continue
+            left = _resets_left(entry)
+            if left > 0 and _grant_usable(entry):
+                grants.append((entry, left))
+    juniper_available = isinstance(juniper, dict) and juniper.get("available") is True
+    total = sum(left for _, left in grants) + (1 if juniper_available else 0)
+    if total <= 0:
+        return None
+    labels = []
+    for entry, _ in grants:
+        label = entry.get("label")
+        if isinstance(label, str) and label.strip() and label not in labels:
+            labels.append(label.strip())
+    if juniper_available and "weekly reset" not in [s.lower() for s in labels]:
+        labels.append("weekly reset")
+    resets_at = None
+    for entry, _ in grants:
+        for key in ("ends_at", "expires_at"):
+            value = entry.get(key)
+            if isinstance(value, str) and value:
+                resets_at = value
+                break
+        if resets_at:
+            break
+    if resets_at is None and isinstance(juniper, dict):
+        for key in ("next_available_at", "weekly_resets_at"):
+            value = juniper.get(key)
+            if isinstance(value, str) and value:
+                resets_at = value
+                break
+    if resets_at is None and isinstance(cedar, dict):
+        value = cedar.get("weekly_resets_at")
+        if isinstance(value, str) and value:
+            resets_at = value
+    out = {"available": total, "url": USAGE_URL}
+    if labels:
+        out["label"] = ", ".join(labels)
+    if resets_at:
+        out["resetsAt"] = resets_at
+    return out
+
+
 def fetch(token=None, opener=None, credentials_path=CREDENTIALS_PATH):
     """Return a normalized Claude provider dict. Never raises."""
     provider = {
@@ -115,7 +195,7 @@ def fetch(token=None, opener=None, credentials_path=CREDENTIALS_PATH):
         }
         return provider
     request = urllib.request.Request(
-        API_URL,
+        API_URL + STATUS_QUERY,
         method="GET",
         headers={
             "Authorization": "Bearer " + access_token,
@@ -155,5 +235,5 @@ def fetch(token=None, opener=None, credentials_path=CREDENTIALS_PATH):
         sub.strip().capitalize() if isinstance(sub, str) and sub.strip() else ""
     )
     provider["windows"] = parse_usage(payload if isinstance(payload, dict) else {})
-    # The usage payload exposes no banked-reset count, so no resets row.
+    provider["resets"] = parse_resets(payload if isinstance(payload, dict) else {})
     return provider

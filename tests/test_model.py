@@ -278,3 +278,20 @@ def test_errored_provider_keeps_notified_state():
     higher = _providers([("codex", "weekly", 100.0, "R1")])
     events, notified = compute_events(higher, notified, 80, 100)
     assert [e["level"] for e in events] == ["crit"]
+
+
+def test_rate_limited_flag_and_recovery():
+    prev = _providers([("claude", "fiveHour", 17.0, "R1")])
+    limited = [{"id": "claude", "windows": [], "error": {"kind": "rateLimited"}}]
+    merged, ids = merge_rate_limited(limited, prev, "2026-11-10T20:00:00Z")
+    assert ids == ["claude"] and merged[0]["rateLimited"] is True
+    assert merged[0]["stale"] is True
+    # Unavailable reuse does not claim rate-limited.
+    down = [{"id": "claude", "windows": [], "error": {"kind": "unavailable"}}]
+    merged, ids = merge_rate_limited(down, prev)
+    assert ids == [] and merged[0].get("rateLimited") is None
+    # Recovery clears the flag and shows fresh windows.
+    fresh = _providers([("claude", "fiveHour", 18.0, "R2")])
+    merged, ids = merge_rate_limited(fresh, merged)
+    assert ids == [] and merged[0].get("rateLimited") is None
+    assert merged[0].get("stale") is False

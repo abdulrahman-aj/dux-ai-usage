@@ -15,6 +15,7 @@ StyledRect {
     property string fetchedAt: ""
     property real warnAt: 80
     property real critAt: 100
+    property var onOpenUsage: null
 
     AiUsageShared {
         id: u
@@ -24,6 +25,7 @@ StyledRect {
     readonly property string headlineLevel: u.headlineLevel(root.provider, tc[0], tc[1])
     readonly property color headlineColor: u.stateColor(root.headlineLevel)
     readonly property var tc: u.clampedThresholds(root.warnAt, root.critAt)
+    readonly property string rateLimit: u.rateLimitText(root.provider)
 
     color: Theme.cardSurface ?? Theme.surfaceContainerHigh
     radius: Theme.cornerRadius
@@ -127,6 +129,15 @@ StyledRect {
             color: Theme.surfaceVariantText
         }
 
+        StyledText {
+            visible: root.rateLimit !== ""
+            width: parent.width
+            wrapMode: Text.WordWrap
+            text: root.rateLimit
+            font.pixelSize: Theme.fontSizeSmall
+            color: Theme.warning
+        }
+
         Repeater {
             model: root.provider?.error ? [] : (root.provider?.windows ?? [])
 
@@ -142,6 +153,8 @@ StyledRect {
         UsageRow {
             width: parent.width
             provider: root.provider
+            nowMs: root.nowMs
+            onOpenUsage: root.onOpenUsage
         }
     }
 }

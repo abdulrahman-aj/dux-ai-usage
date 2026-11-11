@@ -267,6 +267,9 @@ def merge_rate_limited(fresh_providers, prev_providers, prev_fetched_at=None):
     fresh provider is kept as-is with any stale marker cleared.
     limited_ids (which the daemon backs off for) holds rate-limited
     providers only: unreachable ones retry on the normal schedule.
+    Rate-limited reuse also sets rateLimited=True so surfaces can say
+    the provider is rate-limited (and when it retries) instead of a
+    silent no-op; other merges clear the flag.
     """
     prev = {p.get("id"): p for p in (prev_providers or []) if isinstance(p, dict)}
     merged = []
@@ -274,6 +277,7 @@ def merge_rate_limited(fresh_providers, prev_providers, prev_fetched_at=None):
     for provider in fresh_providers or []:
         error = provider.get("error") or {}
         old = prev.get(provider.get("id"))
+        is_limited = error.get("kind") == "rateLimited"
         if (
             error.get("kind") in ("rateLimited", "unavailable")
             and isinstance(old, dict)
@@ -283,9 +287,19 @@ def merge_rate_limited(fresh_providers, prev_providers, prev_fetched_at=None):
             kept = dict(old)
             kept["stale"] = True
             kept["staleSince"] = old.get("staleSince") or prev_fetched_at
+            if is_limited:
+                kept["rateLimited"] = True
+            else:
+                kept.pop("rateLimited", None)
+            kept.pop("retryInMinutes", None)
             merged.append(kept)
-            if error.get("kind") == "rateLimited":
+            if is_limited:
                 limited.append(provider.get("id"))
         else:
+            if is_limited:
+                provider["rateLimited"] = True
+            else:
+                provider.pop("rateLimited", None)
+            provider.pop("retryInMinutes", None)
             merged.append(provider)
     return merged, limited

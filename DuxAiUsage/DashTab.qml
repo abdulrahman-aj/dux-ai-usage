@@ -93,6 +93,13 @@ DashTabComponent {
                     fetchedAt: root.snapshot?.fetchedAt ?? ""
                     warnAt: root.warnAt
                     critAt: root.critAt
+                    onOpenUsage: function() {
+                        var host = root.dashHost;
+                        if (host && typeof host.close === "function")
+                            host.close();
+                        else if (host)
+                            host.dashVisible = false;
+                    }
                 }
             }
         }
