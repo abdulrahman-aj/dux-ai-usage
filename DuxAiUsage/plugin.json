@@ -1,0 +1,33 @@
+{
+    "id": "duxAiUsage",
+    "name": "AI Usage",
+    "description": "Claude, Codex and OpenCode Go subscription usage: bar pill, dash tab, overview card and desktop widget",
+    "version": "0.1.0",
+    "author": "abdulrahman-aj",
+    "type": "composite",
+    "capabilities": ["ai-usage", "dankbar-widget", "dash-tab", "dash-card", "desktop-widget"],
+    "icon": "speed",
+    "components": {
+        "daemon": "./Daemon.qml",
+        "widget": "./Widget.qml",
+        "dash": "./DashTab.qml",
+        "dashCard": "./DashCard.qml",
+        "desktop": "./Desktop.qml"
+    },
+    "settings": "./Settings.qml",
+    "requires_dms": ">=2.1.0",
+    "permissions": ["settings_read", "settings_write", "process", "network"],
+    "dash": {
+        "title": "AI Usage",
+        "icon": "speed",
+        "card": {
+            "title": "AI Usage",
+            "w": 2,
+            "h": 1,
+            "minW": 2,
+            "minH": 1,
+            "maxW": 4,
+            "maxH": 2
+        }
+    }
+}
