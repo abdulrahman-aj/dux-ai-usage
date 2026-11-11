@@ -33,10 +33,7 @@ StyledRect {
     readonly property real pad: Theme.spacingM + Theme.densityStepXS
     readonly property real gapS: Math.max(Theme.spacingXS, Theme.spacingS + Theme.densityStepXS)
 
-    // Hug the content: no reserved empty area under the window rows.
-    // The parent Flow/Grid sizes delegates by height, so bind it.
     implicitHeight: body.implicitHeight + pad * 2
-    height: implicitHeight
 
     Column {
         id: body
@@ -76,7 +73,7 @@ StyledRect {
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 visible: text !== ""
-                text: u.providerUpdatedText(root.provider, root.fetchedAt, root.nowMs)
+                text: u.providerUpdatedText(root.provider, root.nowMs)
                 font.pixelSize: Theme.fontSizeSmall
                 color: Theme.surfaceVariantText
             }

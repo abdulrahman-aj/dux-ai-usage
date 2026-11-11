@@ -27,9 +27,7 @@ Item {
     readonly property real gapXS: Math.max(Theme.spacingXXS, Theme.spacingXS + Theme.densityStepXS)
     readonly property real gapS: Math.max(Theme.spacingXS, Theme.spacingS + Theme.densityStepXS)
 
-    // Hug the two rows so cards track content height (see ProviderCard).
     implicitHeight: topRow.height + gapXS + bottomRow.height
-    height: implicitHeight
 
     Item {
         id: topRow

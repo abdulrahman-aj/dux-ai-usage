@@ -373,24 +373,26 @@ def test_claude_resets_counts_grants_and_weekly():
 
 
 def test_retry_after_parses_seconds_and_dates():
-    assert claude_reader._parse_retry_after(None) is None
-    assert claude_reader._parse_retry_after({}) is None
-    assert claude_reader._parse_retry_after({"Retry-After": "90"}) == 90
-    assert claude_reader._parse_retry_after({"retry-after": "0"}) == 0
-    assert claude_reader._parse_retry_after({"Retry-After": "bogus"}) is None
-    assert claude_reader._parse_retry_after({"Retry-After": ""}) is None
-    assert go_reader._parse_retry_after({"Retry-After": "30"}) == 30
+    from model import parse_retry_after
+
+    assert parse_retry_after(None) is None
+    assert parse_retry_after({}) is None
+    assert parse_retry_after({"Retry-After": "90"}) == 90
+    assert parse_retry_after({"retry-after": "0"}) == 0
+    assert parse_retry_after({"Retry-After": "bogus"}) is None
+    assert parse_retry_after({"Retry-After": ""}) is None
+    assert parse_retry_after({"Retry-After": "30"}) == 30
     # HTTP-date in the future yields a positive delay; past dates clamp to 0.
     import datetime as dt
     import email.utils
 
     future = dt.datetime.now(dt.timezone.utc) + dt.timedelta(seconds=120)
     stamp = email.utils.format_datetime(future, usegmt=True)
-    parsed = claude_reader._parse_retry_after({"Retry-After": stamp})
+    parsed = parse_retry_after({"Retry-After": stamp})
     assert parsed is not None and 0 < parsed <= 120
     past = dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=60)
     assert (
-        claude_reader._parse_retry_after(
+        parse_retry_after(
             {"Retry-After": email.utils.format_datetime(past, usegmt=True)}
         )
         == 0

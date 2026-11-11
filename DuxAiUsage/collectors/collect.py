@@ -8,8 +8,7 @@ become per-provider error hints instead of tracebacks.
 Usage:
     collect.py [--prev '<snapshot json>'] [--notified '<json>']
                [--warn PCT] [--crit PCT] [--disable id,...]
-               [--claude-min-minutes MIN] [--now ISO]
-               [--no-reset-notify]
+               [--now ISO] [--no-reset-notify]
 """
 
 import argparse
@@ -75,12 +74,6 @@ def main(argv=None):
         help="startup first poll: record current levels silently, emit no events",
     )
     parser.add_argument(
-        "--claude-min-minutes",
-        type=float,
-        default=CLAUDE_MIN_SECONDS / 60.0,
-        help="minimum age of the last good Claude fetch before refetching",
-    )
-    parser.add_argument(
         "--now",
         default="",
         help="current time ISO-8601 (tests only; defaults to now)",
@@ -88,12 +81,6 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     warn, crit = clamp_thresholds(args.warn, args.crit)
-    try:
-        claude_min_seconds = float(args.claude_min_minutes) * 60.0
-    except (TypeError, ValueError):
-        claude_min_seconds = float(CLAUDE_MIN_SECONDS)
-    if claude_min_seconds < 0:
-        claude_min_seconds = 0.0
     now_iso = args.now.strip() or dt.datetime.now(dt.timezone.utc).isoformat(
         timespec="seconds"
     )
@@ -126,7 +113,7 @@ def main(argv=None):
             or prev_claude.get("staleSince")
             or prev_fetched
         )
-        if not claude_due(last_good, now_iso, claude_min_seconds):
+        if not claude_due(last_good, now_iso, CLAUDE_MIN_SECONDS):
             skip_ids.add("claude")
 
     # Readers run concurrently (each ~10 s max) so one slow provider
@@ -137,20 +124,16 @@ def main(argv=None):
         if provider_id not in disabled and provider_id not in skip_ids
     ]
     with ThreadPoolExecutor(max_workers=len(READERS)) as pool:
-        partial = list(pool.map(lambda item: item[1](), wanted))
-    fresh_by_id = {pid: result for (pid, _), result in zip(wanted, partial)}
-    fresh = []
-    for provider_id, _ in READERS:
-        if provider_id in disabled:
-            continue
-        if provider_id in skip_ids:
-            continue
-        fresh.append(fresh_by_id[provider_id])
+        # pool.map preserves wanted's READERS order, so the result list
+        # is already the fresh snapshot in order.
+        fresh = list(pool.map(lambda item: item[1](), wanted))
 
     merged, limited = merge_rate_limited(fresh, prev_providers, prev_fetched, now_iso)
     if skip_ids:
         # Skipped providers keep their previous snapshot verbatim (still
         # fresh enough to show); headline/events recompute below from it.
+        # (A skipped provider is never fetched, so merge_rate_limited
+        # cannot list it in limited: no backoff for skipped polls.)
         merged_by_id = {p.get("id"): p for p in merged if isinstance(p, dict)}
         for provider_id, _ in READERS:
             if provider_id not in skip_ids:
@@ -168,8 +151,6 @@ def main(argv=None):
             for provider_id, _ in READERS
             if provider_id not in disabled and provider_id in merged_by_id
         ]
-        # A skipped Claude must not trigger backoff: it was not fetched.
-        limited = [pid for pid in limited if pid not in skip_ids]
     for provider in merged:
         # Hide unused per-model rows here so every surface (and test)
         # shares one rule; annotate the pill/cards headline window.

@@ -160,19 +160,23 @@ QtObject {
 
     // Each provider's own last successful fetch: the collector stamps
     // updatedAt on fresh polls and preserves it across 429 reuse (see
-    // model.merge_rate_limited), falling back to the kept staleSince or
-    // the snapshot's global fetch for pre-upgrade snapshots. Cards show
-    // this when their values are last-known, so a rate-limited Claude
-    // reads "Updated 8m ago" instead of a rate-limit warning while a
-    // fresh Codex shows nothing.
-    function providerUpdatedAt(provider, fallback) {
-        return provider?.updatedAt ?? provider?.staleSince ?? fallback ?? "";
+    // model.merge_rate_limited), falling back to the kept staleSince.
+    // Cards show this when their values are last-known, so a
+    // rate-limited Claude reads "Updated 8m ago" instead of a rate-limit
+    // warning while a fresh Codex shows nothing. Without any kept stamp
+    // (e.g. a first poll that hits 429 with nothing cached) nothing
+    // shows: the error hint already explains the state.
+    function providerUpdatedAt(provider) {
+        return provider?.updatedAt ?? provider?.staleSince ?? "";
     }
 
-    function providerUpdatedText(provider, fallback, nowMs) {
+    function providerUpdatedText(provider, nowMs) {
         if (provider?.stale !== true && provider?.rateLimited !== true)
             return "";
-        return root.updatedText(root.providerUpdatedAt(provider, fallback), nowMs);
+        var stamp = root.providerUpdatedAt(provider);
+        if (!stamp)
+            return "";
+        return root.updatedText(stamp, nowMs);
     }
 
     // Resets line: "N reset(s) available" with type and expiry when

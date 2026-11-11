@@ -38,12 +38,10 @@ PluginComponent {
     property double lastPollStartMs: 0
 
     // Claude shares its OAuth token with every running Claude Code
-    // session, so the plugin refetches it at most every 10 minutes even
-    // when the user polls Codex/Go every 2: usage windows move slowly,
-    // and the collector reuses a recent Claude fetch (see
-    // collectors/model.claude_due). Manual refresh gets the same
-    // per-provider debounce for free.
-    readonly property int claudeMinMinutes: Math.max(root.pollMinutes, 10)
+    // session, so the collector refetches it at most every 10 minutes
+    // (collectors/model.CLAUDE_MIN_SECONDS): a recent good Claude fetch
+    // is reused while Codex/Go poll on the normal schedule. Manual
+    // refresh gets the same per-provider debounce for free.
 
     readonly property string collectorPath: (pluginService?.getPluginPath(pluginId) ?? "") + "/collectors/collect.py"
 
@@ -91,7 +89,7 @@ PluginComponent {
             return;
         root.busy = true;
         root.lastPollStartMs = Date.now();
-        var args = ["python3", root.collectorPath, "--warn", String(root.warnAt), "--crit", String(root.critAt), "--claude-min-minutes", String(root.claudeMinMinutes)];
+        var args = ["python3", root.collectorPath, "--warn", String(root.warnAt), "--crit", String(root.critAt)];
         var disabled = root.disabledIds();
         if (disabled.length > 0)
             args.push("--disable", disabled.join(","));
@@ -124,9 +122,8 @@ PluginComponent {
                 return;
             }
             if (doc.limited && doc.limited.length > 0) {
-                // Exponential backoff, but never below the server's
-                // Retry-After hint when one was served (see
-                // model.next_backoff for the tested rule).
+                // Exponential backoff (doubling, 30 min cap), floored at
+                // the server's Retry-After hint when one was served.
                 var needMinutes = 0;
                 for (var i = 0; i < doc.providers.length; i++) {
                     var hintSec = doc.providers[i].retryAfterSec;
@@ -271,15 +268,13 @@ PluginComponent {
         // Stagger the first poll so shell startup stays fast — but when
         // the cached snapshot is still fresh, wait out the remainder of
         // the interval instead of refetching 15 s after every restart.
+        // Date.parse yields NaN for a missing stamp, which fails the
+        // range check and keeps the 15 s stagger.
         var delayMs = 15000;
-        try {
-            var ageMs = Date.now() - Date.parse(root.snapshot?.fetchedAt);
-            var intervalMs = root.pollMinutes * 60000;
-            if (ageMs >= 0 && ageMs < intervalMs)
-                delayMs = intervalMs - ageMs;
-        } catch (e) {
-            delayMs = 15000;
-        }
+        var ageMs = Date.now() - Date.parse(root.snapshot?.fetchedAt);
+        var intervalMs = root.pollMinutes * 60000;
+        if (ageMs >= 0 && ageMs < intervalMs)
+            delayMs = intervalMs - ageMs;
         firstPoll.interval = delayMs;
         firstPoll.start();
     }
@@ -298,6 +293,11 @@ PluginComponent {
         id: firstPoll
         interval: 15000
         repeat: false
-        onTriggered: root.poll()
+        onTriggered: {
+            // Align the periodic timer to this poll so it cannot fire a
+            // second full poll right after a delayed first poll.
+            pollTimer.restart();
+            root.poll();
+        }
     }
 }

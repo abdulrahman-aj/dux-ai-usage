@@ -39,6 +39,9 @@ event::
      "usedPercent": float | None}
 """
 
+import datetime as dt
+from email.utils import parsedate_to_datetime
+
 RANK = {"warn": 1, "crit": 2}
 
 # Headline window rule (pill + card glance): per provider the pill shows
@@ -301,19 +304,51 @@ def _parse_iso(value):
     if text.endswith("Z"):
         text = text[:-1] + "+00:00"
     try:
-        import datetime as _dt
-
-        moment = _dt.datetime.fromisoformat(text)
+        moment = dt.datetime.fromisoformat(text)
     except (TypeError, ValueError):
         return None
     if moment.tzinfo is None:
-        try:
-            import datetime as _dt
-
-            moment = moment.replace(tzinfo=_dt.timezone.utc)
-        except Exception:
-            return None
+        moment = moment.replace(tzinfo=dt.timezone.utc)
     return moment
+
+
+def parse_retry_after(headers):
+    """Return a Retry-After delay in seconds, or None.
+
+    Shared by the readers: the usage endpoints throttle per token, and a
+    429 carries how long to wait. Accepts delay-seconds or an HTTP-date;
+    negatives and absurd values clamp to 0..3600. Headers may be a
+    case-insensitive HTTPMessage or a plain dict.
+    """
+    if headers is None:
+        return None
+    value = None
+    getter = getattr(headers, "get", None)
+    if callable(getter):
+        for name in ("Retry-After", "retry-after"):
+            try:
+                value = getter(name)
+            except Exception:
+                value = None
+            if value is not None:
+                break
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        value = str(value)
+    value = value.strip()
+    if not value:
+        return None
+    if value.isdigit():
+        return min(max(int(value), 0), 3600)
+    try:
+        when = parsedate_to_datetime(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    now = dt.datetime.now(dt.timezone.utc)
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=dt.timezone.utc)
+    return min(max(int((when - now).total_seconds()), 0), 3600)
 
 
 def claude_due(updated_at_iso, now_iso, min_seconds=CLAUDE_MIN_SECONDS):
@@ -334,45 +369,11 @@ def claude_due(updated_at_iso, now_iso, min_seconds=CLAUDE_MIN_SECONDS):
     return (now - updated).total_seconds() >= window
 
 
-def next_backoff(limited, prev_backoff, poll_minutes, retry_after_sec=None):
-    """Next backoff in minutes after a poll (testable backoff rule).
-
-    Exponential doubling (capped at 30) on rate-limited polls, but never
-    below the server's Retry-After hint when one was served. No limit
-    (and no hint) resets to the normal schedule.
-    """
-    if not limited and retry_after_sec is None:
-        return 0
-    try:
-        base = float(poll_minutes)
-    except (TypeError, ValueError):
-        base = 5.0
-    if not base or base < 1:
-        base = 5.0
-    try:
-        prev = float(prev_backoff or 0)
-    except (TypeError, ValueError):
-        prev = 0
-    need = 0
-    if retry_after_sec is not None:
-        try:
-            need = int(-(-float(retry_after_sec) // 60))
-        except (TypeError, ValueError):
-            need = 0
-        need = max(need, 0)
-    if not limited:
-        return min(need, 30) if need else 0
-    grown = int(prev or base) * 2 if prev else int(base) * 2
-    return min(max(grown, need, 1), 30)
-
-
 def _retry_after_of(error):
-    try:
-        value = (error or {}).get("retryAfter")
-    except AttributeError:
+    if not isinstance(error, dict):
         return None
     try:
-        seconds = int(value)
+        seconds = int(error.get("retryAfter"))
     except (TypeError, ValueError):
         return None
     return seconds if seconds >= 0 else None

@@ -14,7 +14,6 @@ from model import (
     compute_events,
     headline_window,
     merge_rate_limited,
-    next_backoff,
     seed_notified,
     visible_windows,
     window_visible,
@@ -352,18 +351,6 @@ def test_claude_due_respects_minimum_interval():
     assert claude_due("2026-11-10T20:00:00Z", "2026-11-10T20:10:00Z", 600) is True
     assert claude_due("2026-11-10T20:00:00Z", "2026-11-10T20:30:00Z", 600) is True
     assert CLAUDE_MIN_SECONDS == 600
-
-
-def test_next_backoff_doubles_capped_and_honors_retry_after():
-    assert next_backoff(False, 0, 5) == 0
-    assert next_backoff(True, 0, 5) == 10
-    assert next_backoff(True, 10, 5) == 20
-    assert next_backoff(True, 20, 5) == 30
-    # Server hint wins over the doubling when larger, still capped at 30.
-    assert next_backoff(True, 0, 5, 1500) == 25
-    assert next_backoff(True, 0, 5, 3600) == 30
-    # A small hint never shrinks the doubling.
-    assert next_backoff(True, 10, 5, 60) == 20
 
 
 def test_merge_stamps_updated_at_and_propagates_retry_after():

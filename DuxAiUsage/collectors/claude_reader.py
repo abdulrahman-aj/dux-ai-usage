@@ -8,7 +8,8 @@ is told to run any Claude Code command and retry. Nothing is written.
 import json
 import os
 import urllib.request
-from email.utils import parsedate_to_datetime
+
+from model import parse_retry_after
 
 API_URL = "https://api.anthropic.com/api/oauth/usage"
 # Read-only status query: same GET endpoint, asks the server to include
@@ -32,56 +33,6 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 _OPENER = urllib.request.build_opener(_NoRedirect)
-
-
-def _parse_retry_after(headers):
-    """Return Retry-After delay in seconds, or None.
-
-    Why: the usage endpoint throttles per token (shared with every
-    running Claude Code session). The 429 carries how long to wait;
-    honoring it beats exponential guesswork. Accepts delay-seconds
-    or an HTTP-date; clamps negatives to 0 and absurd values to 1 h.
-    Headers may be a case-insensitive HTTPMessage or a plain dict.
-    """
-    if headers is None:
-        return None
-    value = None
-    getter = getattr(headers, "get", None)
-    if callable(getter):
-        try:
-            value = getter("Retry-After")
-        except Exception:
-            value = None
-        if value is None:
-            try:
-                value = getter("retry-after")
-            except Exception:
-                value = None
-    if value is None:
-        return None
-    if not isinstance(value, str):
-        value = str(value)
-    value = value.strip()
-    if not value:
-        return None
-    if value.isdigit():
-        return min(max(int(value), 0), 3600)
-    try:
-        when = parsedate_to_datetime(value)
-    except (TypeError, ValueError, OverflowError):
-        return None
-    try:
-        import datetime as _dt
-
-        now = _dt.datetime.now(_dt.timezone.utc)
-        if when.tzinfo is None:
-            when = when.replace(tzinfo=_dt.timezone.utc)
-        delta = (when - now).total_seconds()
-    except Exception:
-        return None
-    if delta != delta:  # NaN guard
-        return None
-    return min(max(int(delta), 0), 3600)
 
 
 def _read_credentials(path=CREDENTIALS_PATH):
@@ -271,7 +222,7 @@ def fetch(token=None, opener=None, credentials_path=CREDENTIALS_PATH):
             }
         elif code == 429:
             hint = "Claude usage is rate-limited right now. Will retry next poll."
-            retry_after = _parse_retry_after(getattr(error, "headers", None))
+            retry_after = parse_retry_after(getattr(error, "headers", None))
             err = {"kind": "rateLimited", "hint": hint}
             if retry_after is not None:
                 err["retryAfter"] = retry_after
