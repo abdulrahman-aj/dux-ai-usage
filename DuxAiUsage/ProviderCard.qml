@@ -2,13 +2,13 @@ import QtQuick
 import qs.Common
 import qs.DCommon.Widgets
 
-// One provider card: logo + name + plan + headline percent in the
-// header, per-window gauges with reset countdowns, banked-resets note.
-// The usage-page link lives as a small icon button in the header (not
-// a row). Used by the dash tab grid, the popout and the desktop widget
-// alike (same component, sized by its rectangle); the parent sets
-// width, the host lays cards out in its own flow grid.
-StyledRect {
+// One provider card: logo, name and plan in the header with the usage
+// page as a small icon button, then one meter per window and any
+// notes. Built on Dux's own DCard (outlined surface, theme tones), so it
+// looks like the cards in Dux's battery popout and Dash. The parent sets
+// width; a stacked list sets first/last so the cards form one grouped
+// list (Dux's grouped-list radii), otherwise every corner is rounded.
+DCard {
     id: root
 
     property var provider: null
@@ -16,46 +16,43 @@ StyledRect {
     property real warnAt: 80
     property real critAt: 100
     property var onOpenUsage: null
+    property real outerRadius: Theme.cornerRadius
+    property bool first: true
+    property bool last: true
 
     AiUsageShared {
         id: u
     }
 
-    readonly property var headline: u.headlineWindow(root.provider)
-    readonly property string headlineLevel: u.headlineLevel(root.provider, tc[0], tc[1])
-    readonly property color headlineColor: u.stateColor(root.headlineLevel)
     readonly property var tc: u.clampedThresholds(root.warnAt, root.critAt)
     readonly property string updatedLine: u.providerUpdatedText(root.provider, root.nowMs)
     readonly property string resetsLine: u.resetsLine(root.provider, root.nowMs)
     readonly property string usageLink: u.providerLink(root.provider)
+    readonly property real startRadius: first ? outerRadius : Theme.groupedListInnerRadius
+    readonly property real endRadius: last ? outerRadius : Theme.groupedListInnerRadius
 
-    color: Theme.cardSurface ?? Theme.surfaceContainerHigh
-    radius: Theme.cornerRadius
-
-    // Compact card: tight padding and gaps, same information.
-    readonly property real pad: Theme.spacingXS
-    readonly property real gapS: Theme.spacingXXS
-
+    pad: u.cardPad
+    restRadius: outerRadius
+    topLeftRadius: startRadius
+    topRightRadius: startRadius
+    bottomLeftRadius: endRadius
+    bottomRightRadius: endRadius
     implicitHeight: body.implicitHeight + pad * 2
 
     Column {
         id: body
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.top: parent.top
-        anchors.margins: pad
-        spacing: gapS
+        width: parent.width
+        spacing: u.rowGap
 
         Item {
-            id: headerRow
             width: parent.width
-            height: Math.max(logoIcon.implicitHeight, nameText.implicitHeight, headlinePct.implicitHeight, openBtn.visible ? openBtn.implicitHeight : 0)
+            height: Math.max(nameText.implicitHeight, openBtn.visible ? openBtn.height : 0)
 
             DSVGIcon {
                 id: logoIcon
                 source: u.logoFor(root.provider?.id)
-                size: Math.max(Theme.iconSizeSmall, Theme.iconSizeSmall + Theme.spacingXXS + Theme.densityStepXS)
-                colorOverride: Theme.surfaceText
+                size: Theme.iconSizeSmall
+                colorOverride: root.contentColor
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
             }
@@ -68,61 +65,38 @@ StyledRect {
                 text: root.provider?.name ?? ""
                 font.pixelSize: Theme.fontSizeMedium
                 font.weight: Theme.fontWeightMedium
-                color: Theme.surfaceText
+                color: root.contentColor
             }
 
             StyledText {
-                id: planText
                 anchors.left: nameText.right
                 anchors.leftMargin: Theme.spacingXS
-                anchors.right: headlineGroup.visible ? headlineGroup.left : (openBtn.visible ? openBtn.left : parent.right)
-                anchors.rightMargin: headlineGroup.visible ? Theme.spacingXS : (openBtn.visible ? gapS : 0)
-                anchors.verticalCenter: parent.verticalCenter
+                anchors.right: openBtn.visible ? openBtn.left : parent.right
+                anchors.rightMargin: openBtn.visible ? Theme.spacingXS : 0
+                anchors.baseline: nameText.baseline
                 visible: !!(root.provider?.plan)
                 elide: Text.ElideRight
                 text: root.provider?.plan ?? ""
                 font.pixelSize: Theme.fontSizeSmall
-                color: Theme.surfaceVariantText
+                color: root.mutedColor
             }
 
+            // Icon-sized button (Dux's in-row action pattern): the header
+            // stays one text line tall instead of a 32px button row.
             DActionButton {
                 id: openBtn
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 visible: root.usageLink !== ""
+                buttonSize: Theme.iconSizeMedium + Theme.spacingXS
+                iconSize: Theme.iconSizeSmall
+                iconColor: root.mutedColor
                 iconName: "open_in_new"
                 tooltipText: "Open usage page"
                 onClicked: {
                     Qt.openUrlExternally(root.usageLink);
                     if (root.onOpenUsage && typeof root.onOpenUsage === "function")
                         root.onOpenUsage();
-                }
-            }
-
-            Row {
-                id: headlineGroup
-                visible: root.headline !== null
-                anchors.right: openBtn.visible ? openBtn.left : parent.right
-                anchors.rightMargin: openBtn.visible ? gapS : 0
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: 2
-
-                StyledText {
-                    id: headlinePct
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: u.pctText(root.headline?.usedPercent)
-                    font.pixelSize: Theme.fontSizeMedium
-                    font.weight: Theme.fontWeightMedium
-                    color: root.headlineColor
-                }
-
-                StyledText {
-                    visible: root.provider?.headlineShort === true
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: u.shortMark(root.headline?.id)
-                    font.pixelSize: Theme.fontSizeSmall
-                    color: root.headlineColor
-                    opacity: 0.85
                 }
             }
         }
@@ -133,7 +107,7 @@ StyledRect {
             elide: Text.ElideRight
             text: root.updatedLine
             font.pixelSize: Theme.fontSizeSmall
-            color: Theme.surfaceVariantText
+            color: root.mutedColor
         }
 
         StyledText {
@@ -142,7 +116,7 @@ StyledRect {
             wrapMode: Text.WordWrap
             text: root.provider?.error?.hint ?? ""
             font.pixelSize: Theme.fontSizeSmall
-            color: Theme.surfaceVariantText
+            color: root.mutedColor
         }
 
         Repeater {
@@ -163,7 +137,7 @@ StyledRect {
             wrapMode: Text.WordWrap
             text: root.resetsLine
             font.pixelSize: Theme.fontSizeSmall
-            color: Theme.surfaceVariantText
+            color: root.mutedColor
         }
     }
 }

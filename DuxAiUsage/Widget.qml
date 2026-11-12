@@ -121,16 +121,19 @@ PluginComponent {
                     onTriggered: popoutBody.nowMs = Date.now()
                 }
 
-                // Popout gaps stay tight; the host owns the header chrome.
-                readonly property real popGap: Theme.spacingXS
-
+                // The providers form one grouped list (Dux's settings and
+                // control-center pattern): a 2px seam, outer corners only
+                // on the first and last card.
                 width: parent.width
-                spacing: popGap
+                spacing: Theme.groupedListGap
 
                 Repeater {
                     model: root.providers
                     delegate: ProviderCard {
                         width: parent.width
+                        outerRadius: Theme.groupedListOuterRadius
+                        first: index === 0
+                        last: index === root.providers.length - 1
                         provider: modelData
                         nowMs: popoutBody.nowMs
                         warnAt: root.tc[0]

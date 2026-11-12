@@ -49,15 +49,15 @@ DashTabComponent {
             refreshVar.set((refreshVar.value ?? 0) + 1);
     }
 
-    // Tab padding/gaps stay tight; content sizes to the cards.
-    readonly property real padL: Theme.spacingS
-    readonly property real gapM: Theme.spacingXS
+    // The Dash host already pads the tab (DashMetrics.contentPadding);
+    // gaps follow Dash's own density-aware grid gap.
+    readonly property real gapM: DashMetrics.contentGap
 
     // Size to the content: no reserved empty area under the cards.
     // Plugin tabs default to five panel rows; seed ours to the minimum
     // once so the panel tracks content height instead (user resizes
     // still persist and win after that).
-    implicitHeight: content.implicitHeight + padL * 2
+    implicitHeight: content.implicitHeight
     menuActions: [
         {
             label: "Refresh now",
@@ -89,17 +89,10 @@ DashTabComponent {
         width: parent.width
         spacing: gapM
 
+        // No title: the Dash tab bar already names the tab.
         Row {
             width: parent.width
-            spacing: gapM
-
-            StyledText {
-                text: "AI Usage"
-                font.pixelSize: Theme.fontSizeMedium
-                font.weight: Theme.fontWeightMedium
-                color: Theme.surfaceText
-                anchors.verticalCenter: parent.verticalCenter
-            }
+            spacing: Theme.spacingXS
 
             StyledText {
                 text: u.updatedText(root.snapshot?.fetchedAt, root.headerNowMs)
@@ -111,6 +104,8 @@ DashTabComponent {
             DActionButton {
                 iconName: "refresh"
                 tooltipText: "Refresh now"
+                buttonSize: Theme.iconSizeMedium + Theme.spacingXS
+                iconSize: Theme.iconSizeSmall
                 anchors.verticalCenter: parent.verticalCenter
                 onClicked: refreshVar.set((refreshVar.value ?? 0) + 1)
             }
@@ -129,6 +124,7 @@ DashTabComponent {
                 model: root.providers
                 delegate: ProviderCard {
                     width: cardFlow.cardWidth
+                    outerRadius: DashMetrics.cardRadius
                     provider: modelData
                     nowMs: root.headerNowMs
                     warnAt: root.warnAt
