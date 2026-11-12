@@ -22,7 +22,7 @@ Column {
     readonly property bool hasLink: u.providerLink(root.provider) !== ""
     readonly property string resetsText: u.resetsLine(root.provider, root.nowMs)
 
-    spacing: Math.max(Theme.spacingXXS, Theme.spacingXS + Theme.densityStepXS)
+    spacing: Math.max(2, Theme.spacingXXS + Theme.densityStepXS)
     visible: !!root.provider && (root.banked || root.hasLink)
 
     StyledText {

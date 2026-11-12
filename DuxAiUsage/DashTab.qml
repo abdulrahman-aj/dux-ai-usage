@@ -50,8 +50,8 @@ DashTabComponent {
     }
 
     // Tab padding/gaps follow density like other settings surfaces.
-    readonly property real padL: Theme.spacingL + Theme.densityStepXS
-    readonly property real gapM: Math.max(Theme.spacingS, Theme.spacingM + Theme.densityStepXS)
+    readonly property real padL: Theme.spacingM + Theme.densityStepXS
+    readonly property real gapM: Math.max(Theme.spacingXS, Theme.spacingS + Theme.densityStepXS)
 
     // Size to the content: no reserved empty area under the cards.
     // Plugin tabs default to five panel rows; seed ours to the minimum

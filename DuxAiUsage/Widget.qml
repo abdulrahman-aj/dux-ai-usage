@@ -122,7 +122,7 @@ PluginComponent {
                 }
 
                 // Popout gaps follow density like other popout surfaces.
-                readonly property real popGap: Math.max(Theme.spacingS, Theme.spacingM + Theme.densityStepS)
+                readonly property real popGap: Math.max(Theme.spacingXS, Theme.spacingS + Theme.densityStepS)
 
                 width: parent.width
                 spacing: popGap
@@ -147,5 +147,5 @@ PluginComponent {
     }
     // Fixed default size like Dux's own widgets (density applies to
     // live content metrics, not to stored defaults).
-    popoutWidth: 440
+    popoutWidth: 360
 }

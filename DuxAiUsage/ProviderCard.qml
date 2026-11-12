@@ -29,9 +29,9 @@ StyledRect {
     color: Theme.cardSurface ?? Theme.surfaceContainerHigh
     radius: Theme.cornerRadius
 
-    // Card padding follows density like Dash contentPadding.
-    readonly property real pad: Theme.spacingM + Theme.densityStepXS
-    readonly property real gapS: Math.max(Theme.spacingXS, Theme.spacingS + Theme.densityStepXS)
+    // Compact card: tight padding and gaps, same information.
+    readonly property real pad: Theme.spacingS + Theme.densityStepXS
+    readonly property real gapS: Math.max(Theme.spacingXXS, Theme.spacingXS + Theme.densityStepXS)
 
     implicitHeight: body.implicitHeight + pad * 2
 
@@ -104,7 +104,7 @@ StyledRect {
 
             StyledText {
                 text: u.pctText(root.headline?.usedPercent)
-                font.pixelSize: Theme.fontSizeLarge + Theme.spacingS
+                font.pixelSize: Theme.fontSizeXLarge
                 font.weight: Theme.fontWeightMedium
                 color: root.headlineColor
                 anchors.verticalCenter: parent.verticalCenter

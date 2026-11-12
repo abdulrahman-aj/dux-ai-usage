@@ -24,8 +24,8 @@ Item {
 
     // Track height follows density with a floor so dense never collapses.
     readonly property real barH: Math.max(Theme.spacingXS, Theme.spacingS + Theme.densityStepXS)
-    readonly property real gapXS: Math.max(Theme.spacingXXS, Theme.spacingXS + Theme.densityStepXS)
-    readonly property real gapS: Math.max(Theme.spacingXS, Theme.spacingS + Theme.densityStepXS)
+    readonly property real gapXS: Math.max(2, Theme.spacingXXS + Theme.densityStepXS)
+    readonly property real gapS: Math.max(Theme.spacingXXS, Theme.spacingXS + Theme.densityStepXS)
 
     implicitHeight: topRow.height + gapXS + bottomRow.height
 

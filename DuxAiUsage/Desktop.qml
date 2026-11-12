@@ -21,14 +21,14 @@ import qs.Modules.Plugins
 // size. Minimum size (76x44) fits a single-provider pill; more
 // providers need ~240px of width for a row or ~100px of height for a
 // column — below that the painted area clips, like an overfull bar
-// pill. The default size lands in large.
+// pill. The default size lands in small: one compact line per provider.
 DesktopPluginComponent {
     id: root
 
     minWidth: 76
     minHeight: 44
-    property real defaultWidth: 440
-    property real defaultHeight: 320
+    property real defaultWidth: 360
+    property real defaultHeight: 260
 
     property double nowMs: Date.now()
 
@@ -44,8 +44,8 @@ DesktopPluginComponent {
 
     // Density-aware metrics (Dux pattern: bar tokens stay fixed while
     // surfaces add density steps with floors).
-    readonly property real pad: Theme.spacingM + Theme.densityStepXS
-    readonly property real gapS: Math.max(Theme.spacingXS, Theme.spacingS + Theme.densityStepXS)
+    readonly property real pad: Theme.spacingS + Theme.densityStepXS
+    readonly property real gapS: Math.max(Theme.spacingXXS, Theme.spacingXS + Theme.densityStepXS)
     readonly property real minCard: 220 + Theme.densityStepM
     readonly property real smallW: 400 + Theme.densityStepM
     readonly property real smallH: 260 + Theme.densityStepM
@@ -306,7 +306,7 @@ DesktopPluginComponent {
 
                                 StyledRect {
                                     width: parent.width
-                                    height: Math.max(Theme.spacingXS, Theme.spacingS + Theme.densityStepXS)
+                                    height: Math.max(6, Theme.spacingXS + Theme.densityStepXS)
                                     radius: height / 2
                                     color: Theme.surfaceContainerHigh
 
