@@ -121,8 +121,8 @@ PluginComponent {
                     onTriggered: popoutBody.nowMs = Date.now()
                 }
 
-                // Popout gaps follow density like other popout surfaces.
-                readonly property real popGap: Math.max(Theme.spacingXS, Theme.spacingS + Theme.densityStepS)
+                // Popout gaps stay tight; the host owns the header chrome.
+                readonly property real popGap: Theme.spacingXS
 
                 width: parent.width
                 spacing: popGap
@@ -133,7 +133,6 @@ PluginComponent {
                         width: parent.width
                         provider: modelData
                         nowMs: popoutBody.nowMs
-                        fetchedAt: root.snapshot?.fetchedAt ?? ""
                         warnAt: root.tc[0]
                         critAt: root.tc[1]
                         onOpenUsage: function() {
@@ -147,5 +146,5 @@ PluginComponent {
     }
     // Fixed default size like Dux's own widgets (density applies to
     // live content metrics, not to stored defaults).
-    popoutWidth: 360
+    popoutWidth: 340
 }

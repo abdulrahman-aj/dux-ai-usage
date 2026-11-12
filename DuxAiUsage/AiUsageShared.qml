@@ -16,6 +16,10 @@ QtObject {
     // "info" next to amber. Critical must be unmistakable.
     readonly property color critColor: "#F44336"
 
+    // Thin track shared by every window gauge (WindowRow and the
+    // desktop widget's small-mode bars use this one token).
+    readonly property real thinBarHeight: Math.max(3, Theme.spacingXXS + Theme.densityStepXS)
+
     // Clamp the two threshold sliders the same way model.py does, so a
     // pill can never color crit while the daemon toasts warn (or take
     // over a different headline): every surface derives its levels

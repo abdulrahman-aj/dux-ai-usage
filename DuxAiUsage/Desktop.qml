@@ -44,8 +44,8 @@ DesktopPluginComponent {
 
     // Density-aware metrics (Dux pattern: bar tokens stay fixed while
     // surfaces add density steps with floors).
-    readonly property real pad: Theme.spacingS + Theme.densityStepXS
-    readonly property real gapS: Math.max(Theme.spacingXXS, Theme.spacingXS + Theme.densityStepXS)
+    readonly property real pad: Theme.spacingXS
+    readonly property real gapS: Theme.spacingXXS
     readonly property real minCard: 220 + Theme.densityStepM
     readonly property real smallW: 400 + Theme.densityStepM
     readonly property real smallH: 260 + Theme.densityStepM
@@ -306,7 +306,7 @@ DesktopPluginComponent {
 
                                 StyledRect {
                                     width: parent.width
-                                    height: Math.max(6, Theme.spacingXS + Theme.densityStepXS)
+                                    height: u.thinBarHeight
                                     radius: height / 2
                                     color: Theme.surfaceContainerHigh
 
@@ -340,7 +340,6 @@ DesktopPluginComponent {
                         width: cardFlow.cardWidth
                         provider: modelData
                         nowMs: root.nowMs
-                        fetchedAt: root.snapshot?.fetchedAt ?? ""
                         warnAt: root.warnAt
                         critAt: root.critAt
                     }

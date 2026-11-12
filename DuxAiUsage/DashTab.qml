@@ -49,9 +49,9 @@ DashTabComponent {
             refreshVar.set((refreshVar.value ?? 0) + 1);
     }
 
-    // Tab padding/gaps follow density like other settings surfaces.
-    readonly property real padL: Theme.spacingM + Theme.densityStepXS
-    readonly property real gapM: Math.max(Theme.spacingXS, Theme.spacingS + Theme.densityStepXS)
+    // Tab padding/gaps stay tight; content sizes to the cards.
+    readonly property real padL: Theme.spacingS
+    readonly property real gapM: Theme.spacingXS
 
     // Size to the content: no reserved empty area under the cards.
     // Plugin tabs default to five panel rows; seed ours to the minimum
@@ -131,7 +131,6 @@ DashTabComponent {
                     width: cardFlow.cardWidth
                     provider: modelData
                     nowMs: root.headerNowMs
-                    fetchedAt: root.snapshot?.fetchedAt ?? ""
                     warnAt: root.warnAt
                     critAt: root.critAt
                     onOpenUsage: function() {
