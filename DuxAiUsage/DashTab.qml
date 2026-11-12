@@ -43,6 +43,12 @@ DashTabComponent {
     readonly property var snapshot: snapshotVar.value
     readonly property var providers: u.visibleProviders(root.snapshot, root.pluginData)
 
+    // Showing the AI Usage Dash tab refreshes due providers, same as the popout.
+    onLiveChanged: {
+        if (live)
+            refreshVar.set((refreshVar.value ?? 0) + 1);
+    }
+
     // Tab padding/gaps follow density like other settings surfaces.
     readonly property real padL: Theme.spacingL + Theme.densityStepXS
     readonly property real gapM: Math.max(Theme.spacingS, Theme.spacingM + Theme.densityStepXS)

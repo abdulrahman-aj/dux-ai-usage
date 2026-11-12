@@ -65,7 +65,7 @@ Rules:
   debounces per provider plus a 60 s global guard, and restarts wait out a
   fresh cache instead of refetching). Rate-limited or unreachable providers
   keep last-known values with their own updatedAt, so each card shows its
-  own "Updated ... ago" instead of a rate-limit message.
+  own "Updated ... ago" instead of a rate-limit message. Opening the bar popout or the AI Usage Dash tab refreshes whatever providers are due (same debounces apply).
 - The pill headlines one window per provider (long window by default; a
   shorter window at/above warn takes over; see collectors/model.py).
   Unused Claude per-model rows ("Weekly · Fable" at 0%) stay out of the
