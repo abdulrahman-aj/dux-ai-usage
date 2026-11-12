@@ -22,6 +22,13 @@ make lint   # ruff check + format check over collectors/ and tests/
 make test   # pytest, parser/normalizer + threshold-event behavior
 ```
 
+Screenshot every surface at every density (run it on a test desktop,
+never one in use; it backs up and restores the Dux settings it touches):
+
+```sh
+make shots OUT=~/shots   # scripts/capture-shots.sh
+```
+
 ## Install on a live Dux session
 
 ```sh
@@ -91,6 +98,10 @@ Rules:
   The shared formatting helper (AiUsageShared.qml) therefore needs a shell
   restart to pick up edits; the threshold rules stay in one tested place:
   `collectors/model.py`.
+- Dash tab panels snap to whole 96px grid rows (two at least) that ignore
+  density, so a plugin cannot make the panel hug short content. The tab
+  instead stretches its cards to the panel's bottom edge, while reporting
+  its natural height so the panel can still shrink.
 - The overview card slot injects `pluginId`/`pluginService` only once at
   load, which can race; the card reads the singletons directly instead.
 - External edits to `plugin_settings.json` are not re-parsed live (no
