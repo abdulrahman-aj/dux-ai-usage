@@ -73,6 +73,12 @@ StyledRect {
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 visible: text !== ""
+                // The rate-limit note is the longest header text; cap it
+                // so a narrow card elides instead of squeezing the name.
+                width: Math.min(implicitWidth, parent.width * 0.6)
+                elide: Text.ElideRight
+                wrapMode: Text.NoWrap
+                horizontalAlignment: Text.AlignRight
                 text: u.providerUpdatedText(root.provider, root.nowMs)
                 font.pixelSize: Theme.fontSizeSmall
                 color: Theme.surfaceVariantText

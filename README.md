@@ -63,9 +63,13 @@ Rules:
   shares its token with every running Claude Code session, so it refetches
   at most every 10 minutes (a recent good fetch is reused; manual Refresh
   debounces per provider plus a 60 s global guard, and restarts wait out a
-  fresh cache instead of refetching). Rate-limited or unreachable providers
-  keep last-known values with their own updatedAt, so each card shows its
-  own "Updated ... ago" instead of a rate-limit message. Opening the bar popout or the AI Usage Dash tab refreshes whatever providers are due (same debounces apply).
+  fresh cache instead of refetching). After a 429 the next Claude attempt
+  waits out the Retry-After hint too (or the same 10 minutes when the hint
+  is 0/absent, which Anthropic sends on persistent per-token 429s), so a
+  manual Refresh cannot hammer the shared budget either. Rate-limited
+  providers keep last-known values with their own updatedAt plus a short
+  note ("Limiting usage checks · updated 17m ago"); unreachable ones keep
+  values with just the age. Opening the bar popout or the AI Usage Dash tab refreshes whatever providers are due (same debounces apply).
 - The pill headlines one window per provider (long window by default; a
   shorter window at/above warn takes over; see collectors/model.py).
   Unused Claude per-model rows ("Weekly · Fable" at 0%) stay out of the

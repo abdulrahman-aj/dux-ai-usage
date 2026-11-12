@@ -102,19 +102,30 @@ def main(argv=None):
     # gets the same per-provider debounce for free.
     skip_ids = set()
     prev_claude = prev_by_id.get("claude")
-    if (
-        "claude" not in disabled
-        and isinstance(prev_claude, dict)
-        and not prev_claude.get("error")
-        and prev_claude.get("windows")
-    ):
-        last_good = (
-            prev_claude.get("updatedAt")
-            or prev_claude.get("staleSince")
-            or prev_fetched
-        )
-        if not claude_due(last_good, now_iso, CLAUDE_MIN_SECONDS):
-            skip_ids.add("claude")
+    if "claude" not in disabled and isinstance(prev_claude, dict):
+        if prev_claude.get("rateLimited"):
+            # The last attempt hit 429: wait out the server's Retry-After
+            # hint (or the gentle minimum when it is 0/absent, which
+            # Anthropic sends on persistent per-token 429s) instead of
+            # burning the shared token budget again. Manual refresh gets
+            # this gate for free; the kept note below says what happened.
+            wait = CLAUDE_MIN_SECONDS
+            try:
+                hinted = int(prev_claude.get("retryAfterSec"))
+            except (TypeError, ValueError):
+                hinted = 0
+            if hinted > wait:
+                wait = hinted
+            if not claude_due(prev_fetched, now_iso, wait):
+                skip_ids.add("claude")
+        elif not prev_claude.get("error") and prev_claude.get("windows"):
+            last_good = (
+                prev_claude.get("updatedAt")
+                or prev_claude.get("staleSince")
+                or prev_fetched
+            )
+            if not claude_due(last_good, now_iso, CLAUDE_MIN_SECONDS):
+                skip_ids.add("claude")
 
     # Readers run concurrently (each ~10 s max) so one slow provider
     # cannot eat the shell's whole poll timeout; order stays READERS order.

@@ -162,10 +162,11 @@ QtObject {
     // updatedAt on fresh polls and preserves it across 429 reuse (see
     // model.merge_rate_limited), falling back to the kept staleSince.
     // Cards show this when their values are last-known, so a
-    // rate-limited Claude reads "Updated 8m ago" instead of a rate-limit
-    // warning while a fresh Codex shows nothing. Without any kept stamp
-    // (e.g. a first poll that hits 429 with nothing cached) nothing
-    // shows: the error hint already explains the state.
+    // rate-limited Claude reads "Limiting usage checks · updated 8m
+    // ago" instead of a bare age that looks merely stale, while a fresh
+    // Codex shows nothing. Without any kept stamp (e.g. a first poll
+    // that hits 429 with nothing cached) nothing shows: the error hint
+    // already explains the state.
     function providerUpdatedAt(provider) {
         return provider?.updatedAt ?? provider?.staleSince ?? "";
     }
@@ -176,7 +177,10 @@ QtObject {
         var stamp = root.providerUpdatedAt(provider);
         if (!stamp)
             return "";
-        return root.updatedText(stamp, nowMs);
+        var ago = root.updatedText(stamp, nowMs);
+        if (provider?.rateLimited === true)
+            return "Limiting usage checks · " + ago.charAt(0).toLowerCase() + ago.slice(1);
+        return ago;
     }
 
     // Resets line: "N reset(s) available" with type and expiry when
