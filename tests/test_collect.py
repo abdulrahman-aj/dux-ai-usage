@@ -277,3 +277,62 @@ def test_rate_limited_retry_after_hint_extends_wait():
     finally:
         restore()
     assert seen, "elapsed Retry-After must retry"
+
+
+def test_chained_polls_retry_after_skip_window():
+    # Regression test for retry starvation: skipped polls forward the
+    # snapshot (and its fetchedAt) but must not move the post-429 gate,
+    # which measures from the last real attempt. A 429 at 20:00, a
+    # manual-refresh-like poll at 20:02 and steady 5-minute polls must
+    # still retry once the 10-minute minimum elapses.
+    calls = []
+
+    def spy(*args, **kwargs):
+        calls.append(True)
+        return _rate_limited_fresh()
+
+    restore = _patch_readers(spy)
+    try:
+        run1 = _run_collect(
+            ["--disable", "codex,opencodeGo", "--now", "2026-11-10T20:00:00Z"]
+        )
+        assert calls == [True] and run1["limited"] == ["claude"]
+        run2 = _run_collect(
+            [
+                "--disable",
+                "codex,opencodeGo",
+                "--prev",
+                json.dumps(run1),
+                "--now",
+                "2026-11-10T20:02:00Z",
+            ]
+        )
+        assert len(calls) == 1, "refresh inside the window must not refetch"
+        assert run2["limited"] == []
+        run3 = _run_collect(
+            [
+                "--disable",
+                "codex,opencodeGo",
+                "--prev",
+                json.dumps(run2),
+                "--now",
+                "2026-11-10T20:07:00Z",
+            ]
+        )
+        assert len(calls) == 1, "steady cadence must not starve the retry"
+        run4 = _run_collect(
+            [
+                "--disable",
+                "codex,opencodeGo",
+                "--prev",
+                json.dumps(run3),
+                "--now",
+                "2026-11-10T20:12:00Z",
+            ]
+        )
+    finally:
+        restore()
+    assert len(calls) == 2, "retry must happen once the wait elapses"
+    assert run4["limited"] == ["claude"]
+    (claude,) = run4["providers"]
+    assert claude["checkedAt"] == "2026-11-10T20:12:00Z"

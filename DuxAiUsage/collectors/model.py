@@ -395,6 +395,10 @@ def merge_rate_limited(
     on the normal schedule. kept/fresh rate-limited providers carry
     rateLimited=True plus retryAfterSec (the server's Retry-After hint,
     when served) for the backoff; other merges clear both.
+    Every merged provider that was actually fetched now also carries
+    checkedAt=now_iso (the last real attempt): skipped providers are
+    reinserted by the caller untouched, so their checkedAt keeps dating
+    the attempt and the post-429 gate cannot starve on forwarded polls.
     """
     prev = {p.get("id"): p for p in (prev_providers or []) if isinstance(p, dict)}
     merged = []
@@ -428,6 +432,8 @@ def merge_rate_limited(
             else:
                 kept.pop("retryAfterSec", None)
             kept.pop("retryInMinutes", None)
+            if now_iso is not None:
+                kept["checkedAt"] = now_iso
             merged.append(kept)
         else:
             if is_limited:
@@ -446,5 +452,7 @@ def merge_rate_limited(
                     provider["updatedAt"] = now_iso
                 else:
                     provider.pop("updatedAt", None)
+            if now_iso is not None:
+                provider["checkedAt"] = now_iso
             merged.append(provider)
     return merged, limited
