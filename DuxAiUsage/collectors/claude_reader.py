@@ -9,6 +9,8 @@ import json
 import os
 import urllib.request
 
+from model import parse_retry_after
+
 API_URL = "https://api.anthropic.com/api/oauth/usage"
 # Read-only status query: same GET endpoint, asks the server to include
 # the reset-status blocks (cedar_ember grants + juniper_tide weekly
@@ -219,10 +221,12 @@ def fetch(token=None, opener=None, credentials_path=CREDENTIALS_PATH):
                 "hint": "Claude sign-in expired. Run any Claude Code command to refresh, then wait.",
             }
         elif code == 429:
-            provider["error"] = {
-                "kind": "rateLimited",
-                "hint": "Claude usage is rate-limited right now. Will retry next poll.",
-            }
+            hint = "Claude usage is rate-limited right now. Will retry next poll."
+            retry_after = parse_retry_after(getattr(error, "headers", None))
+            err = {"kind": "rateLimited", "hint": hint}
+            if retry_after is not None:
+                err["retryAfter"] = retry_after
+            provider["error"] = err
         else:
             provider["error"] = {
                 "kind": "unavailable",

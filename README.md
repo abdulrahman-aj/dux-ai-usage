@@ -43,10 +43,11 @@ dms ipc call plugins reload duxAiUsage
 
 ```json
 {"fetchedAt": "...", "providers": [{"id": "...", "name": "...", "plan": "...",
- "stale": false, "headlineId": "weekly", "headlineShort": false, "usageUrl": "...",
+ "stale": false, "updatedAt": "...", "retryAfterSec": 90,
+ "headlineId": "weekly", "headlineShort": false, "usageUrl": "...",
  "windows": [{"id": "...", "label": "...", "usedPercent": 17.0, "resetsAt": "..."}],
  "resets": {"available": 0, "url": "..."} | null,
- "error": null | {"kind": "missing|auth|rateLimited|unavailable", "hint": "..."}}],
+ "error": null | {"kind": "missing|auth|rateLimited|unavailable", "hint": "...", "retryAfter": 90}}],
  "events": [...], "notified": {...}, "limited": [...]}
 ```
 
@@ -58,9 +59,13 @@ Rules:
   redacted output only).
 - One shared poller: the daemon component polls; pills/cards/tabs read the
   shared snapshot. Polling is gentle (default 5 min, minimum 2 min) with
-  backoff on HTTP 429. Rate-limited or unreachable providers keep
-  last-known values (marked stale with their original fetch, so the tag
-  shows only when actually stale, with its age).
+  backoff on HTTP 429 that honors the server's Retry-After hint. Claude
+  shares its token with every running Claude Code session, so it refetches
+  at most every 10 minutes (a recent good fetch is reused; manual Refresh
+  debounces per provider plus a 60 s global guard, and restarts wait out a
+  fresh cache instead of refetching). Rate-limited or unreachable providers
+  keep last-known values with their own updatedAt, so each card shows its
+  own "Updated ... ago" instead of a rate-limit message. Opening the bar popout or the AI Usage Dash tab refreshes whatever providers are due (same debounces apply).
 - The pill headlines one window per provider (long window by default; a
   shorter window at/above warn takes over; see collectors/model.py).
   Unused Claude per-model rows ("Weekly · Fable" at 0%) stay out of the

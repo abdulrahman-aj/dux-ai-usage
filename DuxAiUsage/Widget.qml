@@ -38,6 +38,13 @@ PluginComponent {
     readonly property var snapshot: snapshotVar.value
     readonly property var providers: u.visibleProviders(root.snapshot, root.pluginData)
 
+    // Opening the popout refreshes whatever providers are due: the
+    // daemon's 60 s guard and the collector's Claude minimum still apply.
+    onInteractionActiveChanged: {
+        if (interactionActive)
+            refreshVar.set((refreshVar.value ?? 0) + 1);
+    }
+
     horizontalBarPill: Component {
         // Bar-stable: fixed tokens, no density steps (the bar itself
         // never moves with density).

@@ -32,6 +32,16 @@ PluginComponent {
     property int backoffMinutes: 0
     property bool busy: false
     property bool refreshQueued: false
+    // Last poll start (ms): manual Refresh debounces against it so rapid
+    // clicks across the pill/popout/dash/desktop buttons cannot each burn
+    // the shared Claude token budget.
+    property double lastPollStartMs: 0
+
+    // Claude shares its OAuth token with every running Claude Code
+    // session, so the collector refetches it at most every 10 minutes
+    // (collectors/model.CLAUDE_MIN_SECONDS): a recent good Claude fetch
+    // is reused while Codex/Go poll on the normal schedule. Manual
+    // refresh gets the same per-provider debounce for free.
 
     readonly property string collectorPath: (pluginService?.getPluginPath(pluginId) ?? "") + "/collectors/collect.py"
 
@@ -59,6 +69,12 @@ PluginComponent {
     }
 
     function pollNow() {
+        // Per-provider debounce lives in the collector (Claude minimum
+        // interval); this global 60 s guard stops rapid Refresh clicks
+        // from re-polling Codex/Go either. The timer is not restarted on
+        // a debounced click so the scheduled rhythm holds.
+        if (Date.now() - root.lastPollStartMs < 60000)
+            return;
         pollTimer.restart();
         if (root.busy) {
             // A collector run is in flight; run once more when it lands.
@@ -72,6 +88,7 @@ PluginComponent {
         if (root.busy || !pluginService || !root.collectorPath)
             return;
         root.busy = true;
+        root.lastPollStartMs = Date.now();
         var args = ["python3", root.collectorPath, "--warn", String(root.warnAt), "--crit", String(root.critAt)];
         var disabled = root.disabledIds();
         if (disabled.length > 0)
@@ -104,14 +121,19 @@ PluginComponent {
                 root.refreshQueued = false;
                 return;
             }
-            if (doc.limited && doc.limited.length > 0)
-                root.backoffMinutes = Math.min((root.backoffMinutes || root.pollMinutes) * 2, 30);
-            else
+            if (doc.limited && doc.limited.length > 0) {
+                // Exponential backoff (doubling, 30 min cap), floored at
+                // the server's Retry-After hint when one was served.
+                var needMinutes = 0;
+                for (var i = 0; i < doc.providers.length; i++) {
+                    var hintSec = doc.providers[i].retryAfterSec;
+                    if (hintSec > 0)
+                        needMinutes = Math.max(needMinutes, Math.ceil(hintSec / 60));
+                }
+                var grown = Math.min((root.backoffMinutes || root.pollMinutes) * 2, 30);
+                root.backoffMinutes = Math.min(Math.max(grown, needMinutes, 1), 30);
+            } else {
                 root.backoffMinutes = 0;
-            for (var i = 0; i < doc.providers.length; i++) {
-                var p = doc.providers[i];
-                if (doc.limited && doc.limited.indexOf(p.id) !== -1)
-                    p.retryInMinutes = root.backoffMinutes;
             }
             root.snapshot = {
                 "providers": doc.providers,
@@ -243,7 +265,17 @@ PluginComponent {
         root.notified = pluginService.loadPluginState(pluginId, "notified", {}) ?? {};
         if (root.snapshot)
             snapshotVar.set(root.snapshot);
-        // Stagger the first poll so shell startup stays fast.
+        // Stagger the first poll so shell startup stays fast — but when
+        // the cached snapshot is still fresh, wait out the remainder of
+        // the interval instead of refetching 15 s after every restart.
+        // Date.parse yields NaN for a missing stamp, which fails the
+        // range check and keeps the 15 s stagger.
+        var delayMs = 15000;
+        var ageMs = Date.now() - Date.parse(root.snapshot?.fetchedAt);
+        var intervalMs = root.pollMinutes * 60000;
+        if (ageMs >= 0 && ageMs < intervalMs)
+            delayMs = intervalMs - ageMs;
+        firstPoll.interval = delayMs;
         firstPoll.start();
     }
 
@@ -261,6 +293,11 @@ PluginComponent {
         id: firstPoll
         interval: 15000
         repeat: false
-        onTriggered: root.poll()
+        onTriggered: {
+            // Align the periodic timer to this poll so it cannot fire a
+            // second full poll right after a delayed first poll.
+            pollTimer.restart();
+            root.poll();
+        }
     }
 }

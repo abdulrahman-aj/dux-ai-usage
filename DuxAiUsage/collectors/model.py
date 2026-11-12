@@ -12,19 +12,25 @@ Document shape emitted by collect.py::
 provider::
 
     {"id": str, "name": str, "plan": str, "stale": bool,
-     "staleSince": str | None, "headlineId": str | None,
-     "headlineShort": bool, "usageUrl": str | None,
+     "staleSince": str | None, "updatedAt": str | None,
+     "retryAfterSec": int | None,
+     "headlineId": str | None, "headlineShort": bool, "usageUrl": str | None,
      "windows": [{"id": str, "label": str,
                   "usedPercent": float | None, "resetsAt": str | None}],
      "resets": {"available": int, "url": str} | None,
-     "error": {"kind": str, "hint": str} | None}
+     "error": {"kind": str, "hint": str, "retryAfter": int | None} | None}
 
 headlineId names the window the pill and cards headline (see
 headline_window); headlineShort marks a short window taking over the
 long default, so surfaces can show the tiny window mark without
 reimplementing the rule. staleSince is the fetch the last-known values came
 from, so the stale tag shows only for kept values, with its age.
-usageUrl is the provider usage page behind the quiet open link.
+updatedAt is the provider's own last successful fetch (ISO): surfaces
+show each card's own "Updated ... ago" from it instead of one global
+stamp, so a rate-limited Claude reads stale-but-dated while Codex
+stays fresh. retryAfterSec carries the server's Retry-After hint
+(seconds) for the daemon's backoff. usageUrl is the provider usage
+page behind the quiet open link.
 
 event::
 
@@ -32,6 +38,9 @@ event::
      "providerName": str, "windowId": str, "windowLabel": str,
      "usedPercent": float | None}
 """
+
+import datetime as dt
+from email.utils import parsedate_to_datetime
 
 RANK = {"warn": 1, "crit": 2}
 
@@ -281,19 +290,111 @@ def headline_window(provider, warn, crit):
     return sorted(candidates, key=lambda item: (item[1], str(item[0].get("id"))))[-1][0]
 
 
-def merge_rate_limited(fresh_providers, prev_providers, prev_fetched_at=None):
+# Claude shares one OAuth token with every running Claude Code session,
+# so the plugin stays extra gentle there while Codex/Go keep the user's
+# poll interval: a Claude fetch within this window is reused, not refetched.
+CLAUDE_MIN_SECONDS = 600
+
+
+def _parse_iso(value):
+    """Parse an ISO-8601 stamp to an aware datetime, or None."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    text = value.strip()
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        moment = dt.datetime.fromisoformat(text)
+    except (TypeError, ValueError):
+        return None
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=dt.timezone.utc)
+    return moment
+
+
+def parse_retry_after(headers):
+    """Return a Retry-After delay in seconds, or None.
+
+    Shared by the readers: the usage endpoints throttle per token, and a
+    429 carries how long to wait. Accepts delay-seconds or an HTTP-date;
+    negatives and absurd values clamp to 0..3600. Headers may be a
+    case-insensitive HTTPMessage or a plain dict.
+    """
+    if headers is None:
+        return None
+    value = None
+    getter = getattr(headers, "get", None)
+    if callable(getter):
+        for name in ("Retry-After", "retry-after"):
+            try:
+                value = getter(name)
+            except Exception:
+                value = None
+            if value is not None:
+                break
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        value = str(value)
+    value = value.strip()
+    if not value:
+        return None
+    if value.isdigit():
+        return min(max(int(value), 0), 3600)
+    try:
+        when = parsedate_to_datetime(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    now = dt.datetime.now(dt.timezone.utc)
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=dt.timezone.utc)
+    return min(max(int((when - now).total_seconds()), 0), 3600)
+
+
+def claude_due(updated_at_iso, now_iso, min_seconds=CLAUDE_MIN_SECONDS):
+    """True when Claude is due for a refetch (testable scheduling rule).
+
+    Why here, not QML: the skip decision gates a network call, so it
+    needs unit tests. Due when either stamp is missing/invalid or the
+    last good fetch is at least min_seconds old.
+    """
+    try:
+        window = float(min_seconds)
+    except (TypeError, ValueError):
+        window = float(CLAUDE_MIN_SECONDS)
+    updated = _parse_iso(updated_at_iso)
+    now = _parse_iso(now_iso)
+    if updated is None or now is None:
+        return True
+    return (now - updated).total_seconds() >= window
+
+
+def _retry_after_of(error):
+    if not isinstance(error, dict):
+        return None
+    try:
+        seconds = int(error.get("retryAfter"))
+    except (TypeError, ValueError):
+        return None
+    return seconds if seconds >= 0 else None
+
+
+def merge_rate_limited(
+    fresh_providers, prev_providers, prev_fetched_at=None, now_iso=None
+):
     """Keep last-known windows for rate-limited or unreachable providers.
 
     Returns (merged_providers, limited_ids). A fresh provider whose
     error kind is "rateLimited" or "unavailable" is replaced by its
     previous snapshot with stale=True (keeping the original staleSince
-    fetch time so surfaces can say how old the values are); every other
-    fresh provider is kept as-is with any stale marker cleared.
-    limited_ids (which the daemon backs off for) holds rate-limited
-    providers only: unreachable ones retry on the normal schedule.
-    Rate-limited reuse also sets rateLimited=True so surfaces can say
-    the provider is rate-limited (and when it retries) instead of a
-    silent no-op; other merges clear the flag.
+    fetch time and the provider's own updatedAt so surfaces can say how
+    old the values are); every other fresh provider is kept as-is with
+    any stale marker cleared and updatedAt stamped to now_iso.
+    limited_ids (which the daemon backs off for) holds every
+    rate-limited provider, reused or first-seen: unreachable ones retry
+    on the normal schedule. kept/fresh rate-limited providers carry
+    rateLimited=True plus retryAfterSec (the server's Retry-After hint,
+    when served) for the backoff; other merges clear both.
     """
     prev = {p.get("id"): p for p in (prev_providers or []) if isinstance(p, dict)}
     merged = []
@@ -301,9 +402,13 @@ def merge_rate_limited(fresh_providers, prev_providers, prev_fetched_at=None):
     for provider in fresh_providers or []:
         error = provider.get("error") or {}
         old = prev.get(provider.get("id"))
-        is_limited = error.get("kind") == "rateLimited"
+        kind = error.get("kind")
+        is_limited = kind == "rateLimited"
+        retry_after = _retry_after_of(error)
+        if is_limited:
+            limited.append(provider.get("id"))
         if (
-            error.get("kind") in ("rateLimited", "unavailable")
+            kind in ("rateLimited", "unavailable")
             and isinstance(old, dict)
             and old.get("windows")
             and not (old.get("error") or {}).get("kind")
@@ -311,19 +416,35 @@ def merge_rate_limited(fresh_providers, prev_providers, prev_fetched_at=None):
             kept = dict(old)
             kept["stale"] = True
             kept["staleSince"] = old.get("staleSince") or prev_fetched_at
+            kept["updatedAt"] = (
+                old.get("updatedAt") or old.get("staleSince") or prev_fetched_at
+            )
             if is_limited:
                 kept["rateLimited"] = True
             else:
                 kept.pop("rateLimited", None)
+            if retry_after is not None:
+                kept["retryAfterSec"] = retry_after
+            else:
+                kept.pop("retryAfterSec", None)
             kept.pop("retryInMinutes", None)
             merged.append(kept)
-            if is_limited:
-                limited.append(provider.get("id"))
         else:
             if is_limited:
                 provider["rateLimited"] = True
             else:
                 provider.pop("rateLimited", None)
+            if retry_after is not None:
+                provider["retryAfterSec"] = retry_after
+            else:
+                provider.pop("retryAfterSec", None)
             provider.pop("retryInMinutes", None)
+            if not isinstance(provider.get("error"), dict):
+                provider["stale"] = False
+                provider.pop("staleSince", None)
+                if now_iso is not None:
+                    provider["updatedAt"] = now_iso
+                else:
+                    provider.pop("updatedAt", None)
             merged.append(provider)
     return merged, limited

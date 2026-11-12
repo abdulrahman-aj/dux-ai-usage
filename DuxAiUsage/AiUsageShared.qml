@@ -7,7 +7,7 @@ import qs.Common
 // cannot drift between surfaces. The threshold and headline rules
 // themselves live in collectors/model.py (unit-tested); this file only
 // formats the snapshot collect.py annotates (headlineId,
-// headlineShort, staleSince).
+// headlineShort, updatedAt).
 QtObject {
     id: root
 
@@ -158,17 +158,25 @@ QtObject {
         return "Updated " + ago + " ago";
     }
 
-    // Rate-limit tag for 429-kept values: the merge keeps last-known
-    // windows with rateLimited=True (see model.merge_rate_limited) so a
-    // manual refresh is not a silent no-op. Daemon annotates
-    // retryInMinutes from its backoff; other providers still updated.
-    function rateLimitText(provider) {
-        if (provider?.rateLimited !== true)
+    // Each provider's own last successful fetch: the collector stamps
+    // updatedAt on fresh polls and preserves it across 429 reuse (see
+    // model.merge_rate_limited), falling back to the kept staleSince.
+    // Cards show this when their values are last-known, so a
+    // rate-limited Claude reads "Updated 8m ago" instead of a rate-limit
+    // warning while a fresh Codex shows nothing. Without any kept stamp
+    // (e.g. a first poll that hits 429 with nothing cached) nothing
+    // shows: the error hint already explains the state.
+    function providerUpdatedAt(provider) {
+        return provider?.updatedAt ?? provider?.staleSince ?? "";
+    }
+
+    function providerUpdatedText(provider, nowMs) {
+        if (provider?.stale !== true && provider?.rateLimited !== true)
             return "";
-        var mins = provider?.retryInMinutes;
-        if (mins > 0)
-            return "· rate-limited, retry in " + mins + "m";
-        return "· rate-limited, will retry next poll";
+        var stamp = root.providerUpdatedAt(provider);
+        if (!stamp)
+            return "";
+        return root.updatedText(stamp, nowMs);
     }
 
     // Resets line: "N reset(s) available" with type and expiry when
@@ -190,17 +198,5 @@ QtObject {
                 out += " · expiring soon";
         }
         return out;
-    }
-
-    // The last-known tag shows only for values kept from a failed/429
-    // poll (provider.stale), with the age of those values.
-    function staleText(provider, fetchedAt, nowMs) {
-        if (provider?.stale !== true)
-            return "";
-        var since = provider?.staleSince ?? fetchedAt;
-        var ago = root.ageText(since, nowMs);
-        if (ago === "" || ago === "just now")
-            return "· last-known";
-        return "· last-known " + ago;
     }
 }

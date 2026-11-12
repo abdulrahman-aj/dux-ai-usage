@@ -12,6 +12,8 @@ import pathlib
 import sqlite3
 import urllib.request
 
+from model import parse_retry_after
+
 BASE_URL = "https://opencode.ai"
 USAGE_PATH = "/zen/go/v1/usage"
 USAGE_URL = "https://opencode.ai/console/go"
@@ -149,10 +151,12 @@ def fetch(key=None, opener=None, path=None):
                 "hint": "This key has no Go plan. Check the Go console page.",
             }
         elif code == 429:
-            provider["error"] = {
-                "kind": "rateLimited",
-                "hint": "Go usage is rate-limited right now. Will retry next poll.",
-            }
+            hint = "Go usage is rate-limited right now. Will retry next poll."
+            retry_after = parse_retry_after(getattr(error, "headers", None))
+            err = {"kind": "rateLimited", "hint": hint}
+            if retry_after is not None:
+                err["retryAfter"] = retry_after
+            provider["error"] = err
         else:
             provider["error"] = {
                 "kind": "unavailable",
