@@ -150,7 +150,6 @@ DashTabComponent {
                 delegate: ProviderCard {
                     width: cardFlow.cardWidth
                     height: cardFlow.cardHeight
-                    outerRadius: DashMetrics.cardRadius
                     provider: modelData
                     nowMs: root.headerNowMs
                     warnAt: root.warnAt

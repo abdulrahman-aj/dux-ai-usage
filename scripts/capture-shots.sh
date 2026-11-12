@@ -33,17 +33,37 @@ backup=$(mktemp -d)
 cp -p "$settings" "$backup/settings.json"
 cp -p "$session" "$backup/session.json"
 
+popout_open=false
+
 restore() {
+    if $popout_open; then
+        dms ipc call widget toggle duxAiUsage >/dev/null 2>&1 || true
+    fi
     dms ipc call dash close >/dev/null 2>&1 || true
     dms ipc call control-center hide >/dev/null 2>&1 || true
-    cp -p "$backup/settings.json" "$settings"
-    cp -p "$backup/session.json" "$session"
-    sleep 2
+    # dms writes these files itself (e.g. after the last density change);
+    # copy, let it settle, and copy again if one of its writes landed late.
+    local f
+    for _ in 1 2 3; do
+        cp -p "$backup/settings.json" "$settings"
+        cp -p "$backup/session.json" "$session"
+        sleep 2
+        f=ok
+        cmp -s "$backup/settings.json" "$settings" || f=retry
+        cmp -s "$backup/session.json" "$session" || f=retry
+        [ "$f" = ok ] && break
+    done
     echo "restored: density=$(dms ipc call settings get density)"
     cmp "$backup/settings.json" "$settings" && echo "settings.json identical to backup"
     cmp "$backup/session.json" "$session" && echo "session.json identical to backup"
 }
 trap restore EXIT
+
+# Newest file in the screenshot dir. sed reads the whole listing, so a
+# big directory cannot SIGPIPE `ls` (fatal under pipefail) like head.
+newest() {
+    ls -t "$shots" | sed -n 1p
+}
 
 # niri writes to the screenshot-path; wait for the new file, move it.
 shot() {
@@ -52,13 +72,17 @@ shot() {
     # the notification history is untouched).
     dms ipc call notifications dismissAllPopups >/dev/null
     sleep 0.5
-    before=$(ls -t "$shots" | head -1)
+    before=$(newest)
     niri msg action screenshot-screen --write-to-disk true --show-pointer false
     for _ in $(seq 40); do
         sleep 0.25
-        latest=$(ls -t "$shots" | head -1)
+        latest=$(newest)
         [ "$latest" != "$before" ] && break
     done
+    if [ -z "$latest" ] || [ "$latest" = "$before" ]; then
+        echo "no screenshot appeared for $1 (check niri's screenshot-path)" >&2
+        exit 1
+    fi
     sleep 0.5
     mv "$shots/$latest" "$out/$1.png"
     echo "shot $1"
@@ -76,9 +100,11 @@ for d in "${densities[@]}"; do
     sleep 2
     shot "desktop-$d"
     dms ipc call widget toggle duxAiUsage >/dev/null
+    popout_open=true
     sleep 1.5
     shot "popout-$d"
     dms ipc call widget toggle duxAiUsage >/dev/null
+    popout_open=false
     sleep 1
     dms ipc call dash open plugin_duxAiUsage >/dev/null
     sleep 2
