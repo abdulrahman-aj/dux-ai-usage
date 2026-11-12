@@ -49,7 +49,7 @@ DashCardComponent {
     // follows density while spacings use the density-aware row gap, and
     // the 0.62 floor keeps text legible.
     readonly property real entryShare: 118 + Theme.densityStepM
-    readonly property real rowGap: Math.max(Theme.spacingS, Theme.spacingM + Theme.densityStepS)
+    readonly property real rowGap: Math.max(Theme.spacingXS, Theme.spacingS + Theme.densityStepS)
     readonly property real entryScale: {
         var n = Math.max(1, root.providers.length);
         return Math.max(0.62, Math.min(1, root.width / (n * root.entryShare)));

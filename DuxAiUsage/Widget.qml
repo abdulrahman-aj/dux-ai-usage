@@ -121,19 +121,21 @@ PluginComponent {
                     onTriggered: popoutBody.nowMs = Date.now()
                 }
 
-                // Popout gaps follow density like other popout surfaces.
-                readonly property real popGap: Math.max(Theme.spacingS, Theme.spacingM + Theme.densityStepS)
-
+                // The providers form one grouped list (Dux's settings and
+                // control-center pattern): a 2px seam, outer corners only
+                // on the first and last card.
                 width: parent.width
-                spacing: popGap
+                spacing: Theme.groupedListGap
 
                 Repeater {
                     model: root.providers
                     delegate: ProviderCard {
                         width: parent.width
+                        outerRadius: Theme.groupedListOuterRadius
+                        first: index === 0
+                        last: index === root.providers.length - 1
                         provider: modelData
                         nowMs: popoutBody.nowMs
-                        fetchedAt: root.snapshot?.fetchedAt ?? ""
                         warnAt: root.tc[0]
                         critAt: root.tc[1]
                         onOpenUsage: function() {
@@ -147,5 +149,5 @@ PluginComponent {
     }
     // Fixed default size like Dux's own widgets (density applies to
     // live content metrics, not to stored defaults).
-    popoutWidth: 440
+    popoutWidth: 340
 }

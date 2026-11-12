@@ -119,3 +119,220 @@ def test_stale_claude_is_due_again():
     (claude,) = doc["providers"]
     assert claude["windows"][0]["usedPercent"] == 42.0
     assert claude["updatedAt"] == "2026-11-10T20:30:00Z"
+
+
+def _prev_rate_limited(updated_at, fetched_at, retry_after_sec=None):
+    """Prev snapshot whose last Claude attempt hit 429 (kept values)."""
+    provider = {
+        "id": "claude",
+        "name": "Claude",
+        "plan": "Pro",
+        "stale": True,
+        "staleSince": updated_at,
+        "updatedAt": updated_at,
+        "rateLimited": True,
+        "windows": [
+            {
+                "id": "fiveHour",
+                "label": "5-hour",
+                "usedPercent": 17.0,
+                "resetsAt": None,
+            }
+        ],
+        "resets": None,
+        "error": None,
+        "headlineId": "fiveHour",
+        "headlineShort": False,
+    }
+    if retry_after_sec is not None:
+        provider["retryAfterSec"] = retry_after_sec
+    return json.dumps({"fetchedAt": fetched_at, "providers": [provider]})
+
+
+def _patch_readers(monkey_spy):
+    """Swap collect.READERS' claude entry for a spy; return restore fn."""
+    import collect as _collect
+
+    real_readers = _collect.READERS
+    _collect.READERS = tuple(
+        (pid, monkey_spy if pid == "claude" else fn) for pid, fn in real_readers
+    )
+    return lambda: setattr(_collect, "READERS", real_readers)
+
+
+def _rate_limited_fresh(retry_after=0):
+    return {
+        "id": "claude",
+        "name": "Claude",
+        "plan": "Pro",
+        "stale": False,
+        "windows": [],
+        "resets": None,
+        "usageUrl": "https://claude.ai/settings/usage",
+        "error": {"kind": "rateLimited", "hint": "retry", "retryAfter": retry_after},
+    }
+
+
+def test_rate_limited_claude_skips_refetch_within_minimum():
+    # Last attempt hit 429 five minutes ago with retry-after 0: no network
+    # reader runs (Codex/Go disabled), the kept values stay with their
+    # own updatedAt, and nothing is reported as newly limited.
+    seen = []
+
+    def spy(*args, **kwargs):
+        seen.append(True)
+        return _rate_limited_fresh()
+
+    restore = _patch_readers(spy)
+    try:
+        doc = _run_collect(
+            [
+                "--disable",
+                "codex,opencodeGo",
+                "--prev",
+                _prev_rate_limited("2026-11-10T20:00:00Z", "2026-11-10T20:25:00Z", 0),
+                "--now",
+                "2026-11-10T20:30:00Z",
+            ]
+        )
+    finally:
+        restore()
+    assert not seen, "recent 429 must not be retried yet"
+    assert doc["fetchedAt"] == "2026-11-10T20:30:00Z"
+    assert doc["limited"] == []
+    (claude,) = doc["providers"]
+    assert claude["windows"][0]["usedPercent"] == 17.0
+    assert claude["updatedAt"] == "2026-11-10T20:00:00Z"
+    assert claude["stale"] is True and claude["rateLimited"] is True
+
+
+def test_rate_limited_claude_refetch_due_after_minimum():
+    # Fifteen minutes after the 429 attempt the minimum has elapsed: the
+    # collector tries again, and the fresh 429 keeps the last-known values.
+    seen = []
+
+    def spy(*args, **kwargs):
+        seen.append(True)
+        return _rate_limited_fresh()
+
+    restore = _patch_readers(spy)
+    try:
+        doc = _run_collect(
+            [
+                "--disable",
+                "codex,opencodeGo",
+                "--prev",
+                _prev_rate_limited("2026-11-10T20:00:00Z", "2026-11-10T20:00:00Z", 0),
+                "--now",
+                "2026-11-10T20:15:00Z",
+            ]
+        )
+    finally:
+        restore()
+    assert seen, "due Claude must be retried, not skipped"
+    assert doc["limited"] == ["claude"]
+    (claude,) = doc["providers"]
+    assert claude["windows"][0]["usedPercent"] == 17.0
+    assert claude["stale"] is True and claude["rateLimited"] is True
+    assert claude["updatedAt"] == "2026-11-10T20:00:00Z"
+
+
+def test_rate_limited_retry_after_hint_extends_wait():
+    # A served Retry-After above the minimum (30 min) holds the skip past
+    # the 10-minute floor; once it elapses the collector retries.
+    seen = []
+
+    def spy(*args, **kwargs):
+        seen.append(True)
+        return _rate_limited_fresh(retry_after=1800)
+
+    restore = _patch_readers(spy)
+    try:
+        doc = _run_collect(
+            [
+                "--disable",
+                "codex,opencodeGo",
+                "--prev",
+                _prev_rate_limited(
+                    "2026-11-10T20:00:00Z", "2026-11-10T20:15:00Z", 1800
+                ),
+                "--now",
+                "2026-11-10T20:30:00Z",
+            ]
+        )
+        assert not seen, "Retry-After hint must hold the skip"
+        assert doc["limited"] == []
+        doc = _run_collect(
+            [
+                "--disable",
+                "codex,opencodeGo",
+                "--prev",
+                _prev_rate_limited(
+                    "2026-11-10T20:00:00Z", "2026-11-10T20:00:00Z", 1800
+                ),
+                "--now",
+                "2026-11-10T20:35:00Z",
+            ]
+        )
+    finally:
+        restore()
+    assert seen, "elapsed Retry-After must retry"
+
+
+def test_chained_polls_retry_after_skip_window():
+    # Regression test for retry starvation: skipped polls forward the
+    # snapshot (and its fetchedAt) but must not move the post-429 gate,
+    # which measures from the last real attempt. A 429 at 20:00, a
+    # manual-refresh-like poll at 20:02 and steady 5-minute polls must
+    # still retry once the 10-minute minimum elapses.
+    calls = []
+
+    def spy(*args, **kwargs):
+        calls.append(True)
+        return _rate_limited_fresh()
+
+    restore = _patch_readers(spy)
+    try:
+        run1 = _run_collect(
+            ["--disable", "codex,opencodeGo", "--now", "2026-11-10T20:00:00Z"]
+        )
+        assert calls == [True] and run1["limited"] == ["claude"]
+        run2 = _run_collect(
+            [
+                "--disable",
+                "codex,opencodeGo",
+                "--prev",
+                json.dumps(run1),
+                "--now",
+                "2026-11-10T20:02:00Z",
+            ]
+        )
+        assert len(calls) == 1, "refresh inside the window must not refetch"
+        assert run2["limited"] == []
+        run3 = _run_collect(
+            [
+                "--disable",
+                "codex,opencodeGo",
+                "--prev",
+                json.dumps(run2),
+                "--now",
+                "2026-11-10T20:07:00Z",
+            ]
+        )
+        assert len(calls) == 1, "steady cadence must not starve the retry"
+        run4 = _run_collect(
+            [
+                "--disable",
+                "codex,opencodeGo",
+                "--prev",
+                json.dumps(run3),
+                "--now",
+                "2026-11-10T20:12:00Z",
+            ]
+        )
+    finally:
+        restore()
+    assert len(calls) == 2, "retry must happen once the wait elapses"
+    assert run4["limited"] == ["claude"]
+    (claude,) = run4["providers"]
+    assert claude["checkedAt"] == "2026-11-10T20:12:00Z"

@@ -21,14 +21,14 @@ import qs.Modules.Plugins
 // size. Minimum size (76x44) fits a single-provider pill; more
 // providers need ~240px of width for a row or ~100px of height for a
 // column — below that the painted area clips, like an overfull bar
-// pill. The default size lands in large.
+// pill. The default size lands in small: one compact line per provider.
 DesktopPluginComponent {
     id: root
 
     minWidth: 76
     minHeight: 44
-    property real defaultWidth: 440
-    property real defaultHeight: 320
+    property real defaultWidth: 360
+    property real defaultHeight: 260
 
     property double nowMs: Date.now()
 
@@ -42,10 +42,9 @@ DesktopPluginComponent {
     readonly property real warnAt: pluginData.warnThreshold ?? 80
     readonly property real critAt: pluginData.critThreshold ?? 100
 
-    // Density-aware metrics (Dux pattern: bar tokens stay fixed while
-    // surfaces add density steps with floors).
-    readonly property real pad: Theme.spacingM + Theme.densityStepXS
-    readonly property real gapS: Math.max(Theme.spacingXS, Theme.spacingS + Theme.densityStepXS)
+    // Density-aware metrics shared with the cards (see AiUsageShared).
+    readonly property real pad: u.cardPad
+    readonly property real gapS: u.rowGap
     readonly property real minCard: 220 + Theme.densityStepM
     readonly property real smallW: 400 + Theme.densityStepM
     readonly property real smallH: 260 + Theme.densityStepM
@@ -181,6 +180,8 @@ DesktopPluginComponent {
                 DActionButton {
                     iconName: "refresh"
                     tooltipText: "Refresh now"
+                    buttonSize: Theme.iconSizeMedium + Theme.spacingXS
+                    iconSize: Theme.iconSizeSmall
                     anchors.verticalCenter: parent.verticalCenter
                     onClicked: refreshVar.set((refreshVar.value ?? 0) + 1)
                 }
@@ -260,7 +261,7 @@ DesktopPluginComponent {
                         DSVGIcon {
                             id: sLogo
                             source: u.logoFor(prov?.id)
-                            size: Theme.iconSizeSmall + Theme.densityStepXS
+                            size: Theme.iconSizeSmall
                             colorOverride: Theme.surfaceText
                             anchors.left: parent.left
                             anchors.verticalCenter: parent.verticalCenter
@@ -304,13 +305,13 @@ DesktopPluginComponent {
                             Repeater {
                                 model: prov?.error ? [] : (prov?.windows ?? [])
 
-                                StyledRect {
+                                Rectangle {
                                     width: parent.width
-                                    height: Math.max(Theme.spacingXS, Theme.spacingS + Theme.densityStepXS)
+                                    height: u.meterHeight
                                     radius: height / 2
-                                    color: Theme.surfaceContainerHigh
+                                    color: u.meterTrack
 
-                                    StyledRect {
+                                    Rectangle {
                                         anchors.left: parent.left
                                         anchors.verticalCenter: parent.verticalCenter
                                         width: Math.max(0, parent.width * Math.min(100, Math.max(0, modelData?.usedPercent ?? 0)) / 100)
@@ -340,7 +341,6 @@ DesktopPluginComponent {
                         width: cardFlow.cardWidth
                         provider: modelData
                         nowMs: root.nowMs
-                        fetchedAt: root.snapshot?.fetchedAt ?? ""
                         warnAt: root.warnAt
                         critAt: root.critAt
                     }

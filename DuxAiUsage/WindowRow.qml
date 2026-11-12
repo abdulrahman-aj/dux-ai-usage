@@ -2,11 +2,10 @@ import QtQuick
 import qs.Common
 import qs.DCommon.Widgets
 
-// One usage-window gauge row: label + reset countdown on top, bar +
-// percent below. Shared by the popout list and the provider cards so
-// every surface meters a window identically. Two lines so the row fits
-// any card width down to a narrow desktop widget; the parent sets
-// width and the bar takes what is left.
+// One usage-window meter: label on the left, percent and reset
+// countdown on the right, a thin track below. Shared by every
+// ProviderCard so all surfaces meter a window identically; the parent
+// sets width.
 Item {
     id: root
 
@@ -19,28 +18,23 @@ Item {
         id: u
     }
 
-    readonly property string countdownText: root.win?.resetsAt ? "↻ " + u.countdown(root.win.resetsAt, root.nowMs) : ""
+    readonly property string countdownText: root.win?.resetsAt ? u.countdown(root.win.resetsAt, root.nowMs) : ""
     readonly property color levelColor: u.stateColor(u.levelOf(root.win?.usedPercent, root.warnAt, root.critAt))
 
-    // Track height follows density with a floor so dense never collapses.
-    readonly property real barH: Math.max(Theme.spacingXS, Theme.spacingS + Theme.densityStepXS)
-    readonly property real gapXS: Math.max(Theme.spacingXXS, Theme.spacingXS + Theme.densityStepXS)
-    readonly property real gapS: Math.max(Theme.spacingXS, Theme.spacingS + Theme.densityStepXS)
-
-    implicitHeight: topRow.height + gapXS + bottomRow.height
+    implicitHeight: topRow.height + Theme.spacingXS + bar.height
 
     Item {
         id: topRow
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
-        height: Math.max(labelText.implicitHeight, cdText.implicitHeight)
+        height: Math.max(labelText.implicitHeight, pctText.implicitHeight)
 
         StyledText {
             id: labelText
             anchors.left: parent.left
-            anchors.right: cdText.left
-            anchors.rightMargin: cdText.visible ? gapS : 0
+            anchors.right: rightGroup.left
+            anchors.rightMargin: Theme.spacingS
             anchors.verticalCenter: parent.verticalCenter
             elide: Text.ElideRight
             text: root.win?.label ?? root.win?.id ?? ""
@@ -48,51 +42,61 @@ Item {
             color: Theme.surfaceText
         }
 
-        StyledText {
-            id: cdText
+        Row {
+            id: rightGroup
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            visible: root.countdownText !== ""
-            text: root.countdownText
-            font.pixelSize: Theme.fontSizeSmall
-            color: Theme.surfaceVariantText
+            spacing: Theme.spacingS
+
+            // Reserved "100%" width keeps the percents of every row in
+            // one right-aligned column, like Dux's own numeric readouts.
+            NumericText {
+                id: pctText
+                anchors.verticalCenter: parent.verticalCenter
+                reserveText: "100%"
+                horizontalAlignment: Text.AlignRight
+                text: u.pctText(root.win?.usedPercent)
+                font.pixelSize: Theme.fontSizeSmall
+                font.weight: Theme.fontWeightMedium
+                color: root.levelColor
+            }
+
+            Row {
+                visible: root.countdownText !== ""
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: Theme.spacingXXS
+
+                DIcon {
+                    anchors.verticalCenter: parent.verticalCenter
+                    name: "schedule"
+                    size: Theme.fontSizeSmall
+                    color: Theme.surfaceVariantText
+                }
+
+                StyledText {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: root.countdownText
+                    font.pixelSize: Theme.fontSizeSmall
+                    color: Theme.surfaceVariantText
+                }
+            }
         }
     }
 
-    Item {
-        id: bottomRow
+    Rectangle {
+        id: bar
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: topRow.bottom
-        anchors.topMargin: gapXS
-        height: Math.max(pctText.implicitHeight, barH)
+        anchors.topMargin: Theme.spacingXS
+        height: u.meterHeight
+        radius: height / 2
+        color: u.meterTrack
 
-        StyledRect {
-            anchors.left: parent.left
-            anchors.right: pctText.left
-            anchors.rightMargin: gapS
-            anchors.verticalCenter: parent.verticalCenter
-            height: barH
-            radius: barH / 2
-            color: Theme.surfaceContainerHigh
-
-            StyledRect {
-                anchors.left: parent.left
-                anchors.verticalCenter: parent.verticalCenter
-                width: Math.max(0, parent.width * Math.min(100, Math.max(0, root.win?.usedPercent ?? 0)) / 100)
-                height: parent.height
-                radius: parent.radius
-                color: root.levelColor
-            }
-        }
-
-        StyledText {
-            id: pctText
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            text: u.pctText(root.win?.usedPercent)
-            font.pixelSize: Theme.fontSizeSmall
-            font.weight: Theme.fontWeightMedium
+        Rectangle {
+            width: Math.max(0, parent.width * Math.min(100, Math.max(0, root.win?.usedPercent ?? 0)) / 100)
+            height: parent.height
+            radius: parent.radius
             color: root.levelColor
         }
     }

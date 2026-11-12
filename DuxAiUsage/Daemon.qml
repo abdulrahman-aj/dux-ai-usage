@@ -123,7 +123,10 @@ PluginComponent {
             }
             if (doc.limited && doc.limited.length > 0) {
                 // Exponential backoff (doubling, 30 min cap), floored at
-                // the server's Retry-After hint when one was served.
+                // the server's Retry-After hint when one was served. A 0
+                // hint (what Anthropic sends on persistent per-token 429s)
+                // is not a wait: the doubling floor applies instead, and
+                // the collector skips Claude until the minimum elapses.
                 var needMinutes = 0;
                 for (var i = 0; i < doc.providers.length; i++) {
                     var hintSec = doc.providers[i].retryAfterSec;

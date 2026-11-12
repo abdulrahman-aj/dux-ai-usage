@@ -102,19 +102,34 @@ def main(argv=None):
     # gets the same per-provider debounce for free.
     skip_ids = set()
     prev_claude = prev_by_id.get("claude")
-    if (
-        "claude" not in disabled
-        and isinstance(prev_claude, dict)
-        and not prev_claude.get("error")
-        and prev_claude.get("windows")
-    ):
-        last_good = (
-            prev_claude.get("updatedAt")
-            or prev_claude.get("staleSince")
-            or prev_fetched
-        )
-        if not claude_due(last_good, now_iso, CLAUDE_MIN_SECONDS):
-            skip_ids.add("claude")
+    if "claude" not in disabled and isinstance(prev_claude, dict):
+        if prev_claude.get("rateLimited"):
+            # The last attempt hit 429: wait out the server's Retry-After
+            # hint (or the gentle minimum when it is 0/absent, which
+            # Anthropic sends on persistent per-token 429s) instead of
+            # burning the shared token budget again. Manual refresh gets
+            # this gate for free; the kept note below says what happened.
+            # The gate measures from checkedAt (the last real attempt):
+            # skipped polls forward it untouched, so a steady cadence
+            # still reaches the retry instead of starving.
+            wait = CLAUDE_MIN_SECONDS
+            try:
+                hinted = int(prev_claude.get("retryAfterSec"))
+            except (TypeError, ValueError):
+                hinted = 0
+            if hinted > wait:
+                wait = hinted
+            last_attempt = prev_claude.get("checkedAt") or prev_fetched
+            if not claude_due(last_attempt, now_iso, wait):
+                skip_ids.add("claude")
+        elif not prev_claude.get("error") and prev_claude.get("windows"):
+            last_good = (
+                prev_claude.get("updatedAt")
+                or prev_claude.get("staleSince")
+                or prev_fetched
+            )
+            if not claude_due(last_good, now_iso, CLAUDE_MIN_SECONDS):
+                skip_ids.add("claude")
 
     # Readers run concurrently (each ~10 s max) so one slow provider
     # cannot eat the shell's whole poll timeout; order stays READERS order.
@@ -134,6 +149,9 @@ def main(argv=None):
         # fresh enough to show); headline/events recompute below from it.
         # (A skipped provider is never fetched, so merge_rate_limited
         # cannot list it in limited: no backoff for skipped polls.)
+        # Skips also preserve checkedAt (the last real attempt), so the
+        # post-429 gate below measures from the attempt, not from the
+        # skipped polls that merely forwarded it.
         merged_by_id = {p.get("id"): p for p in merged if isinstance(p, dict)}
         for provider_id, _ in READERS:
             if provider_id not in skip_ids:
@@ -141,7 +159,7 @@ def main(argv=None):
             old = prev_by_id.get(provider_id)
             if isinstance(old, dict):
                 kept = dict(old)
-                if not kept.get("updatedAt"):
+                if kept.get("windows") and not kept.get("updatedAt"):
                     fallback = kept.get("staleSince") or prev_fetched
                     if fallback:
                         kept["updatedAt"] = fallback

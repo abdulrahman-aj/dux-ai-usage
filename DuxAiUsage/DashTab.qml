@@ -49,15 +49,17 @@ DashTabComponent {
             refreshVar.set((refreshVar.value ?? 0) + 1);
     }
 
-    // Tab padding/gaps follow density like other settings surfaces.
-    readonly property real padL: Theme.spacingL + Theme.densityStepXS
-    readonly property real gapM: Math.max(Theme.spacingS, Theme.spacingM + Theme.densityStepXS)
+    // The Dash host already pads the tab (DashMetrics.contentPadding);
+    // gaps follow Dash's own density-aware grid gap.
+    readonly property real gapM: DashMetrics.contentGap
 
-    // Size to the content: no reserved empty area under the cards.
+    // Report the NATURAL content height (cards at their own size), never
+    // the stretched one: the panel height derives from this, so a
+    // stretched value would pin the panel and stop it ever shrinking.
     // Plugin tabs default to five panel rows; seed ours to the minimum
     // once so the panel tracks content height instead (user resizes
     // still persist and win after that).
-    implicitHeight: content.implicitHeight + padL * 2
+    implicitHeight: root.providers.length > 0 ? headerRow.height + gapM + cardFlow.naturalHeight : content.implicitHeight
     menuActions: [
         {
             label: "Refresh now",
@@ -89,17 +91,11 @@ DashTabComponent {
         width: parent.width
         spacing: gapM
 
+        // No title: the Dash tab bar already names the tab.
         Row {
+            id: headerRow
             width: parent.width
-            spacing: gapM
-
-            StyledText {
-                text: "AI Usage"
-                font.pixelSize: Theme.fontSizeMedium
-                font.weight: Theme.fontWeightMedium
-                color: Theme.surfaceText
-                anchors.verticalCenter: parent.verticalCenter
-            }
+            spacing: Theme.spacingXS
 
             StyledText {
                 text: u.updatedText(root.snapshot?.fetchedAt, root.headerNowMs)
@@ -111,6 +107,8 @@ DashTabComponent {
             DActionButton {
                 iconName: "refresh"
                 tooltipText: "Refresh now"
+                buttonSize: Theme.iconSizeMedium + Theme.spacingXS
+                iconSize: Theme.iconSizeSmall
                 anchors.verticalCenter: parent.verticalCenter
                 onClicked: refreshVar.set((refreshVar.value ?? 0) + 1)
             }
@@ -125,13 +123,35 @@ DashTabComponent {
             readonly property int cols: width < 460 + Theme.densityStepM ? 1 : width < 760 + Theme.densityStepM ? 2 : 3
             readonly property real cardWidth: (width - (cols - 1) * spacing) / cols
 
+            // The Dash snaps every panel to whole 96px grid rows (two at
+            // least, and the rows ignore density), so the panel is almost
+            // always taller than the cards and the plugin cannot shrink
+            // it. Instead the cards fill it: every card gets the same
+            // height, the tallest card's or an equal share of the
+            // panel's leftover height, whichever is larger, so the cards
+            // end on the panel's bottom edge at every density and size.
+            readonly property int rows: Math.ceil(cardRepeater.count / cols)
+            readonly property real tallest: {
+                var h = 0;
+                for (var i = 0; i < cardRepeater.count; i++) {
+                    var card = cardRepeater.itemAt(i);
+                    if (card)
+                        h = Math.max(h, card.implicitHeight);
+                }
+                return h;
+            }
+            readonly property real naturalHeight: rows * tallest + Math.max(0, rows - 1) * spacing
+            readonly property real fillHeight: root.height - headerRow.height - gapM
+            readonly property real cardHeight: rows > 0 ? (Math.max(naturalHeight, fillHeight) - (rows - 1) * spacing) / rows : 0
+
             Repeater {
+                id: cardRepeater
                 model: root.providers
                 delegate: ProviderCard {
                     width: cardFlow.cardWidth
+                    height: cardFlow.cardHeight
                     provider: modelData
                     nowMs: root.headerNowMs
-                    fetchedAt: root.snapshot?.fetchedAt ?? ""
                     warnAt: root.warnAt
                     critAt: root.critAt
                     onOpenUsage: function() {

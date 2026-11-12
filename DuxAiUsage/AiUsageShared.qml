@@ -16,6 +16,19 @@ QtObject {
     // "info" next to amber. Critical must be unmistakable.
     readonly property color critColor: "#F44336"
 
+    // Surface metrics for the cards, popout, Dash tab and desktop
+    // widget. Same recipe as Dux's own metrics singletons (PopoutMetrics,
+    // CcMetrics): a base token plus a density step, floored so "dense"
+    // stays legible. spacious / comfortable / compact / dense:
+    //   cardPad 16 / 12 / 8 / 6, rowGap 10 / 8 / 6 / 4.
+    // The bar pill never uses these: Dux keeps the bar fixed.
+    readonly property real cardPad: Math.max(Theme.spacingXS + Theme.spacingXXS, Theme.spacingM + Theme.densityStepS)
+    readonly property real rowGap: Math.max(Theme.spacingXS, Theme.spacingS + Theme.densityStepXS)
+    // Meter track: the 4px line Dux's SystemMonitor widget uses, tinted
+    // like Dux's Dash meters (content color at the focus state alpha).
+    readonly property real meterHeight: Theme.spacingXS
+    readonly property color meterTrack: Theme.withAlpha(Theme.surfaceText, Theme.stateLayerFocus)
+
     // Clamp the two threshold sliders the same way model.py does, so a
     // pill can never color crit while the daemon toasts warn (or take
     // over a different headline): every surface derives its levels
@@ -162,10 +175,11 @@ QtObject {
     // updatedAt on fresh polls and preserves it across 429 reuse (see
     // model.merge_rate_limited), falling back to the kept staleSince.
     // Cards show this when their values are last-known, so a
-    // rate-limited Claude reads "Updated 8m ago" instead of a rate-limit
-    // warning while a fresh Codex shows nothing. Without any kept stamp
-    // (e.g. a first poll that hits 429 with nothing cached) nothing
-    // shows: the error hint already explains the state.
+    // rate-limited Claude reads "Limiting usage checks · updated 8m
+    // ago" instead of a bare age that looks merely stale, while a fresh
+    // Codex shows nothing. Without any kept stamp (e.g. a first poll
+    // that hits 429 with nothing cached) nothing shows: the error hint
+    // already explains the state.
     function providerUpdatedAt(provider) {
         return provider?.updatedAt ?? provider?.staleSince ?? "";
     }
@@ -176,7 +190,10 @@ QtObject {
         var stamp = root.providerUpdatedAt(provider);
         if (!stamp)
             return "";
-        return root.updatedText(stamp, nowMs);
+        var ago = root.updatedText(stamp, nowMs);
+        if (provider?.rateLimited === true)
+            return "Limiting usage checks · " + ago.charAt(0).toLowerCase() + ago.slice(1);
+        return ago;
     }
 
     // Resets line: "N reset(s) available" with type and expiry when
