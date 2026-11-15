@@ -114,7 +114,7 @@ def test_codex_standard_plus_shape():
     ]
     assert parsed["resets"] == {
         "available": 0,
-        "url": "https://chatgpt.com/codex/settings/usage",
+        "url": "https://chatgpt.com/settings/usage",
     }
 
 
