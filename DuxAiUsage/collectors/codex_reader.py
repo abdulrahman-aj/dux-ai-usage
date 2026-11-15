@@ -17,7 +17,7 @@ import subprocess
 import time
 
 RPC_TIMEOUT_SECONDS = 10
-USAGE_URL = "https://chatgpt.com/codex/settings/usage"
+USAGE_URL = "https://chatgpt.com/settings/usage"
 
 # windowDurationMins -> (window id, label)
 DURATIONS = {
