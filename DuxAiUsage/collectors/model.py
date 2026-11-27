@@ -88,13 +88,8 @@ def _is_scoped(window_id):
 
 
 def _is_headline(window):
-    """True unless the reader flagged this row detail-only.
-
-    Antigravity tags its third-party pool "headline": False: those rows
-    stay visible in the card but must neither headline the pill nor
-    fire alerts, or a spent allowance nobody uses would pin the pill
-    at 100%. Readers that say nothing headline as usual.
-    """
+    """True unless the reader flagged this row detail-only (never the
+    pill headline, never an alert; still shown in the card)."""
     return not isinstance(window, dict) or window.get("headline") is not False
 
 
@@ -187,12 +182,12 @@ def compute_events(curr_providers, notified, warn, crit, reset_notify=True):
     """
     warn, crit = clamp_thresholds(warn, crit)
     curr = _window_map(curr_providers)
-    # Detail-only rows (Antigravity's third-party pool) never alert and
-    # read as vanished for notified-state cleanup, so a pre-upgrade
-    # entry for them is forgotten instead of lingering.
-    for windows in curr.values():
-        for window_id in [wid for wid, w in windows.items() if not _is_headline(w)]:
-            del windows[window_id]
+    # Detail-only rows never alert; dropping them here also forgets any
+    # pre-upgrade notified entry for them in the cleanup below.
+    for provider_id, windows in curr.items():
+        curr[provider_id] = {
+            wid: w for wid, w in windows.items() if _is_headline(w)
+        }
     notified = dict(notified or {})
     events = []
 
@@ -299,9 +294,8 @@ def headline_window(provider, warn, crit):
         candidates.append((window, percent))
     if not candidates:
         return None
-    # Detail-only rows never headline; if every row is detail-only
-    # (e.g. agy one day reporting just the third-party pool), fall back
-    # to all rows so the pill still shows something real.
+    # Detail-only rows never headline; with nothing else to show, fall
+    # back to all rows so the pill never goes blank.
     headliners = [item for item in candidates if _is_headline(item[0])]
     pool = headliners or candidates
     long_id = LONG_WINDOW.get(provider.get("id"))

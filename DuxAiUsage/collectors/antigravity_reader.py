@@ -84,11 +84,8 @@ def parse_usage(document):
                     "label": kind[1] + " · " + label,
                     "usedPercent": max(0.0, min(100.0, (1.0 - remaining) * 100.0)),
                     "resetsAt": reset if isinstance(reset, str) and reset else None,
-                    # The pill and alerts follow the Gemini pool: the
-                    # third-party pool is a tiny shared allowance that is
-                    # exhausted almost immediately, so letting it headline
-                    # would pin the pill at 100% over quota nobody uses.
-                    # Its rows stay visible in the card as detail.
+                    # Detail-only: the third-party pool exhausts almost
+                    # immediately, so it must not drive the pill or alerts.
                     "headline": key == "gemini",
                 }
             )
