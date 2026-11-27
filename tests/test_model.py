@@ -208,9 +208,6 @@ def test_pooled_windows_headline_the_gemini_pool():
         ("3p.weekly", 100.0, True),
     ]
     assert _headlined("antigravity", hot) == "gemini.fiveHour"
-    # Every row detail-only: fall back to the most-used long window so
-    # the pill still shows something real.
-    assert _headlined("antigravity", calm[2:]) == "3p.weekly"
 
 
 def test_detail_only_windows_never_fire_events():

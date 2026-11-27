@@ -177,8 +177,7 @@ def compute_events(curr_providers, notified, warn, crit, reset_notify=True):
     """
     warn, crit = clamp_thresholds(warn, crit)
     curr = _window_map(curr_providers)
-    # Detail-only rows never alert; dropping them here also forgets any
-    # pre-upgrade notified entry for them in the cleanup below.
+    # Detail-only rows never alert, and vanish from notified-state cleanup.
     for provider_id, windows in curr.items():
         curr[provider_id] = {
             wid: w for wid, w in windows.items() if not w.get("detailOnly")
@@ -271,9 +270,7 @@ def headline_window(provider, warn, crit):
     Default is the provider's long window (LONG_WINDOW). A shorter
     window at/above warn takes over, so urgency wins over the default;
     a short warn never hides a long crit. Ties between short windows
-    break by higher percent, then shorter window, then id. Detail-only
-    rows never headline unless every row is detail-only, when the rule
-    falls back to all rows.
+    break by higher percent, then shorter window, then id.
     """
     if not isinstance(provider, dict):
         return None
@@ -287,16 +284,13 @@ def headline_window(provider, warn, crit):
         if percent is None:
             continue
         candidates.append((window, percent))
+    candidates = [item for item in candidates if not item[0].get("detailOnly")]
     if not candidates:
         return None
-    # Detail-only rows never headline; with nothing else to show, fall
-    # back to all rows so the pill never goes blank.
-    headliners = [item for item in candidates if not item[0].get("detailOnly")]
-    pool = headliners or candidates
     long_id = LONG_WINDOW.get(provider.get("id"))
     # With several pools (Antigravity) the most-used long window speaks
     # for the provider; single-pool providers have at most one.
-    longs = [item for item in pool if window_kind(item[0].get("id")) == long_id]
+    longs = [item for item in candidates if window_kind(item[0].get("id")) == long_id]
     long = max(longs, key=lambda item: item[1])[0] if longs else None
     long_rank = _window_rank(long_id)
     long_level = order.get(level_of(_numeric_percent(long), warn, crit), 0)
@@ -312,7 +306,7 @@ def headline_window(provider, warn, crit):
 
     short_warnings = [
         item
-        for item in pool
+        for item in candidates
         if _window_rank(item[0].get("id")) < long_rank
         and order.get(level_of(item[1], warn, crit), 0) >= 1
         and order.get(level_of(item[1], warn, crit), 0) >= long_level
@@ -321,7 +315,7 @@ def headline_window(provider, warn, crit):
         return sorted(short_warnings, key=short_key)[-1][0]
     if long is not None:
         return long
-    return sorted(pool, key=lambda item: (item[1], str(item[0].get("id"))))[-1][0]
+    return sorted(candidates, key=lambda item: (item[1], str(item[0].get("id"))))[-1][0]
 
 
 # Claude shares one OAuth token with every running Claude Code session,
