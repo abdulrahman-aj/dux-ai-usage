@@ -195,7 +195,21 @@ PluginComponent {
                 body = "Fresh quota window started.";
             }
             var icon = (pluginService?.getPluginPath(pluginId) ?? "") + "/assets/" + shared.logoName(event.providerId) + ".svg";
-            var args = ["notify-send", "-a", "AI Usage", "-i", icon, "-u", urgency, "-A", "open=Open usage page", summary, body];
+            // Antigravity has no web usage page (usageUrl null), so its
+            // action would silently no-op in openUsagePage: only offer
+            // the button when there is somewhere to open.
+            var usageUrl = "";
+            var providers = root.snapshot?.providers ?? [];
+            for (var k = 0; k < providers.length; k++) {
+                if (providers[k].id === event.providerId) {
+                    usageUrl = providers[k].usageUrl ?? "";
+                    break;
+                }
+            }
+            var args = ["notify-send", "-a", "AI Usage", "-i", icon, "-u", urgency];
+            if (usageUrl !== "")
+                args.push("-A", "open=Open usage page");
+            args.push(summary, body);
             // -A implies --wait: the click lands here as "open". No
             // runCommand id: Proc nulls a shared id's callback when any
             // concurrent notification completes, which would drop a
