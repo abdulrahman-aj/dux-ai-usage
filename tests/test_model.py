@@ -150,14 +150,14 @@ def test_rate_limited_keeps_last_known_values():
 
 def _headlined(provider_id, windows, warn=80, crit=100):
     """Build one provider and return its headline window id (or None)."""
-    provider = {
-        "id": provider_id,
-        "name": provider_id,
-        "windows": [
-            {"id": wid, "label": wid, "usedPercent": pct, "resetsAt": None}
-            for wid, pct in windows
-        ],
-    }
+    built = []
+    for entry in windows:
+        wid, pct = entry[0], entry[1]
+        window = {"id": wid, "label": wid, "usedPercent": pct, "resetsAt": None}
+        if len(entry) > 2:
+            window["headline"] = entry[2]
+        built.append(window)
+    provider = {"id": provider_id, "name": provider_id, "windows": built}
     headline = headline_window(provider, warn, crit)
     return headline.get("id") if headline else None
 
@@ -188,19 +188,56 @@ def test_short_warn_never_hides_long_crit():
     assert _headlined("codex", [("fiveHour", 100.0), ("weekly", 85.0)]) == "fiveHour"
 
 
-def test_pooled_windows_headline_the_worst_pool():
-    # Antigravity: one 5-hour + weekly pair per model pool.
+def test_pooled_windows_headline_the_gemini_pool():
+    # Antigravity: one 5-hour + weekly pair per model pool; the
+    # third-party pool is detail-only, so the pill follows Gemini even
+    # when the shared allowance is the most-used window overall.
     calm = [
-        ("gemini.fiveHour", 12.0),
-        ("gemini.weekly", 28.0),
-        ("3p.fiveHour", 40.0),
-        ("3p.weekly", 49.0),
+        ("gemini.fiveHour", 12.0, True),
+        ("gemini.weekly", 28.0, True),
+        ("3p.fiveHour", 40.0, False),
+        ("3p.weekly", 49.0, False),
     ]
-    # Calm everywhere: the most-used weekly speaks for the provider.
-    assert _headlined("antigravity", calm) == "3p.weekly"
-    # One pool's 5-hour burning takes over, like a single-pool short window.
-    burning = calm[:2] + [("3p.fiveHour", 97.0), ("3p.weekly", 49.0)]
-    assert _headlined("antigravity", burning) == "3p.fiveHour"
+    assert _headlined("antigravity", calm) == "gemini.weekly"
+    # A burning Gemini 5-hour takes over, like a single-pool short window.
+    burning = calm[:2] + [("3p.fiveHour", 97.0, False), ("3p.weekly", 49.0, False)]
+    assert _headlined("antigravity", burning) == "gemini.weekly"
+    hot = [
+        ("gemini.fiveHour", 97.0, True),
+        ("gemini.weekly", 28.0, True),
+        ("3p.fiveHour", 40.0, False),
+        ("3p.weekly", 100.0, False),
+    ]
+    assert _headlined("antigravity", hot) == "gemini.fiveHour"
+    # Every row detail-only: fall back to the most-used long window so
+    # the pill still shows something real.
+    assert _headlined("antigravity", calm[2:]) == "3p.weekly"
+
+
+def test_detail_only_windows_never_fire_events():
+    from model import compute_events
+
+    providers = [
+        {
+            "id": "antigravity",
+            "name": "antigravity",
+            "windows": [
+                {
+                    "id": "gemini.weekly",
+                    "label": "Weekly · Gemini",
+                    "usedPercent": 50.0,
+                },
+                {
+                    "id": "3p.weekly",
+                    "label": "Weekly · Claude and GPT",
+                    "usedPercent": 100.0,
+                    "headline": False,
+                },
+            ],
+        }
+    ]
+    events, notified = compute_events(providers, {}, 80, 100)
+    assert events == [] and notified == {}
 
 
 def test_headline_ties_and_missing_windows():

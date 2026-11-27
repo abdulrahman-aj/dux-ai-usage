@@ -503,6 +503,9 @@ def test_antigravity_usage_parses_every_pool_as_used_percent():
         "3p.fiveHour",
         "3p.weekly",
     ]
+    # The pill follows the Gemini pool; third-party rows are detail-only.
+    assert by_id["gemini.weekly"]["headline"] is True
+    assert by_id["3p.weekly"]["headline"] is False
     assert by_id["gemini.fiveHour"]["label"] == "5-hour · Gemini"
     assert by_id["3p.weekly"]["label"] == "Weekly · Claude and GPT"
     assert provider["usageUrl"] == antigravity_reader.USAGE_URL
