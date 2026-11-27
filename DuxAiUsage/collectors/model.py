@@ -88,12 +88,6 @@ def _is_scoped(window_id):
     return isinstance(window_id, str) and window_id.startswith("weekly-")
 
 
-def _is_detail_only(window):
-    """True only for rows a reader marked detail-only: shown in the
-    card, but never the pill headline and never an alert."""
-    return isinstance(window, dict) and window.get("detailOnly") is True
-
-
 def _numeric_percent(window):
     percent = window.get("usedPercent") if isinstance(window, dict) else None
     if isinstance(percent, bool) or not isinstance(percent, (int, float)):
@@ -140,7 +134,7 @@ def seed_notified(curr_providers, warn, crit):
         for window in windows or []:
             if not isinstance(window, dict) or not window.get("id"):
                 continue
-            if _is_detail_only(window):
+            if window.get("detailOnly"):
                 continue
             percent = window.get("usedPercent")
             if isinstance(percent, bool) or not isinstance(percent, (int, float)):
@@ -187,7 +181,7 @@ def compute_events(curr_providers, notified, warn, crit, reset_notify=True):
     # pre-upgrade notified entry for them in the cleanup below.
     for provider_id, windows in curr.items():
         curr[provider_id] = {
-            wid: w for wid, w in windows.items() if not _is_detail_only(w)
+            wid: w for wid, w in windows.items() if not w.get("detailOnly")
         }
     notified = dict(notified or {})
     events = []
@@ -297,7 +291,7 @@ def headline_window(provider, warn, crit):
         return None
     # Detail-only rows never headline; with nothing else to show, fall
     # back to all rows so the pill never goes blank.
-    headliners = [item for item in candidates if not _is_detail_only(item[0])]
+    headliners = [item for item in candidates if not item[0].get("detailOnly")]
     pool = headliners or candidates
     long_id = LONG_WINDOW.get(provider.get("id"))
     # With several pools (Antigravity) the most-used long window speaks
