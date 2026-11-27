@@ -57,6 +57,12 @@ def parse_usage(document):
         for bucket in group.get("buckets") or []:
             if not isinstance(bucket, dict):
                 continue
+            if bucket.get("disabled") is True:
+                # Weekly exhausted: agy marks the pool's 5-hour bucket
+                # disabled ("does not currently apply") instead of
+                # omitting it; showing it at 100% would fake a 5-hour
+                # burnout and steal the pill headline.
+                continue
             kind = KINDS.get(bucket.get("window"))
             remaining = bucket.get("remaining_fraction")
             bucket_id = bucket.get("id")

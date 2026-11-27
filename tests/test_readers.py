@@ -517,6 +517,22 @@ def test_antigravity_unknown_buckets_are_skipped():
     assert antigravity_reader.parse_usage({"status": "SUCCESS"}) == []
 
 
+def test_antigravity_disabled_bucket_is_skipped_not_exhausted():
+    # Live shape when the weekly pool is exhausted: agy flags the
+    # pool's 5-hour bucket disabled with no reset_time. It must not
+    # surface as a 100% 5-hour window stealing the headline.
+    doc = json.loads(json.dumps(AGY_USAGE))
+    bucket = doc["command"]["data"]["groups"][1]["buckets"][1]
+    bucket["disabled"] = True
+    del bucket["reset_time"]
+    windows = antigravity_reader.parse_usage(doc)
+    assert [w["id"] for w in windows] == [
+        "gemini.fiveHour",
+        "gemini.weekly",
+        "3p.weekly",
+    ]
+
+
 def _agy_raises(error):
     def run():
         raise error
