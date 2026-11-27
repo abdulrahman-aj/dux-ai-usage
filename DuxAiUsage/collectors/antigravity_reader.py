@@ -86,7 +86,7 @@ def parse_usage(document):
                     "resetsAt": reset if isinstance(reset, str) and reset else None,
                     # Detail-only: the third-party pool exhausts almost
                     # immediately, so it must not drive the pill or alerts.
-                    "headline": key == "gemini",
+                    "detailOnly": key != "gemini",
                 }
             )
         # agy lists weekly first; show 5-hour first like the others.

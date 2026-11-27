@@ -23,7 +23,7 @@ provider::
 headlineId names the window the pill and cards headline (see
 headline_window); headlineShort marks a short window taking over the
 long default, so surfaces can show the tiny window mark without
-reimplementing the rule. A window may carry "headline": False to stay
+reimplementing the rule. A window may carry "detailOnly": True to stay
 detail-only: shown in the card, but never headlined and never alerted. staleSince is the fetch the last-known values came
 from, so the stale tag shows only for kept values, with its age.
 updatedAt is the provider's own last successful fetch (ISO): surfaces
@@ -88,10 +88,10 @@ def _is_scoped(window_id):
     return isinstance(window_id, str) and window_id.startswith("weekly-")
 
 
-def _is_headline(window):
-    """True unless the reader flagged this row detail-only (never the
-    pill headline, never an alert; still shown in the card)."""
-    return not isinstance(window, dict) or window.get("headline") is not False
+def _is_detail_only(window):
+    """True only for rows a reader marked detail-only: shown in the
+    card, but never the pill headline and never an alert."""
+    return isinstance(window, dict) and window.get("detailOnly") is True
 
 
 def _numeric_percent(window):
@@ -140,7 +140,7 @@ def seed_notified(curr_providers, warn, crit):
         for window in windows or []:
             if not isinstance(window, dict) or not window.get("id"):
                 continue
-            if not _is_headline(window):
+            if _is_detail_only(window):
                 continue
             percent = window.get("usedPercent")
             if isinstance(percent, bool) or not isinstance(percent, (int, float)):
@@ -186,7 +186,9 @@ def compute_events(curr_providers, notified, warn, crit, reset_notify=True):
     # Detail-only rows never alert; dropping them here also forgets any
     # pre-upgrade notified entry for them in the cleanup below.
     for provider_id, windows in curr.items():
-        curr[provider_id] = {wid: w for wid, w in windows.items() if _is_headline(w)}
+        curr[provider_id] = {
+            wid: w for wid, w in windows.items() if not _is_detail_only(w)
+        }
     notified = dict(notified or {})
     events = []
 
@@ -275,9 +277,9 @@ def headline_window(provider, warn, crit):
     Default is the provider's long window (LONG_WINDOW). A shorter
     window at/above warn takes over, so urgency wins over the default;
     a short warn never hides a long crit. Ties between short windows
-    break by higher percent, then shorter window, then id. Rows flagged
-    detail-only ("headline": False) never headline unless every row is
-    detail-only, when the rule falls back to all rows.
+    break by higher percent, then shorter window, then id. Detail-only
+    rows never headline unless every row is detail-only, when the rule
+    falls back to all rows.
     """
     if not isinstance(provider, dict):
         return None
@@ -295,7 +297,7 @@ def headline_window(provider, warn, crit):
         return None
     # Detail-only rows never headline; with nothing else to show, fall
     # back to all rows so the pill never goes blank.
-    headliners = [item for item in candidates if _is_headline(item[0])]
+    headliners = [item for item in candidates if not _is_detail_only(item[0])]
     pool = headliners or candidates
     long_id = LONG_WINDOW.get(provider.get("id"))
     # With several pools (Antigravity) the most-used long window speaks

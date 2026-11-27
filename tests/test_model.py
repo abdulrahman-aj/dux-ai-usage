@@ -155,7 +155,7 @@ def _headlined(provider_id, windows, warn=80, crit=100):
         wid, pct = entry[0], entry[1]
         window = {"id": wid, "label": wid, "usedPercent": pct, "resetsAt": None}
         if len(entry) > 2:
-            window["headline"] = entry[2]
+            window["detailOnly"] = entry[2]
         built.append(window)
     provider = {"id": provider_id, "name": provider_id, "windows": built}
     headline = headline_window(provider, warn, crit)
@@ -193,20 +193,20 @@ def test_pooled_windows_headline_the_gemini_pool():
     # third-party pool is detail-only, so the pill follows Gemini even
     # when the shared allowance is the most-used window overall.
     calm = [
-        ("gemini.fiveHour", 12.0, True),
-        ("gemini.weekly", 28.0, True),
-        ("3p.fiveHour", 40.0, False),
-        ("3p.weekly", 49.0, False),
+        ("gemini.fiveHour", 12.0, False),
+        ("gemini.weekly", 28.0, False),
+        ("3p.fiveHour", 40.0, True),
+        ("3p.weekly", 49.0, True),
     ]
     assert _headlined("antigravity", calm) == "gemini.weekly"
     # A burning Gemini 5-hour takes over, like a single-pool short window.
-    burning = calm[:2] + [("3p.fiveHour", 97.0, False), ("3p.weekly", 49.0, False)]
+    burning = calm[:2] + [("3p.fiveHour", 97.0, True), ("3p.weekly", 49.0, True)]
     assert _headlined("antigravity", burning) == "gemini.weekly"
     hot = [
-        ("gemini.fiveHour", 97.0, True),
-        ("gemini.weekly", 28.0, True),
-        ("3p.fiveHour", 40.0, False),
-        ("3p.weekly", 100.0, False),
+        ("gemini.fiveHour", 97.0, False),
+        ("gemini.weekly", 28.0, False),
+        ("3p.fiveHour", 40.0, True),
+        ("3p.weekly", 100.0, True),
     ]
     assert _headlined("antigravity", hot) == "gemini.fiveHour"
     # Every row detail-only: fall back to the most-used long window so
@@ -231,7 +231,7 @@ def test_detail_only_windows_never_fire_events():
                     "id": "3p.weekly",
                     "label": "Weekly · Claude and GPT",
                     "usedPercent": 100.0,
-                    "headline": False,
+                    "detailOnly": True,
                 },
             ],
         }
