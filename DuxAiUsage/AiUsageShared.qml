@@ -49,7 +49,8 @@ QtObject {
         var showClaude = settings?.enableClaude ?? true;
         var showCodex = settings?.enableCodex ?? true;
         var showGo = settings?.enableGo ?? true;
-        return all.filter(p => (p.id === "claude" && showClaude) || (p.id === "codex" && showCodex) || (p.id === "opencodeGo" && showGo));
+        var showAntigravity = settings?.enableAntigravity ?? true;
+        return all.filter(p => (p.id === "claude" && showClaude) || (p.id === "codex" && showCodex) || (p.id === "opencodeGo" && showGo) || (p.id === "antigravity" && showAntigravity));
     }
 
     function levelOf(percent, warn, crit) {
@@ -98,10 +99,12 @@ QtObject {
 
     // Tiny mark identifying a short headline window ("5h", "W", "M").
     // Shown only on takeover; the normal state is logo + number alone.
+    // Pooled ids ("gemini.fiveHour", see model.window_kind) mark by kind.
     function shortMark(windowId) {
         var known = {"fiveHour": "5h", "rolling": "5h", "weekly": "W", "monthly": "M"};
-        if (known[windowId])
-            return known[windowId];
+        var kind = String(windowId ?? "").split(".").pop();
+        if (known[kind])
+            return known[kind];
         return "";
     }
 
@@ -110,6 +113,8 @@ QtObject {
             return "claude";
         if (providerId === "codex")
             return "codex";
+        if (providerId === "antigravity")
+            return "antigravity";
         return "opencode";
     }
 

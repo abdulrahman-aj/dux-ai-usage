@@ -188,6 +188,21 @@ def test_short_warn_never_hides_long_crit():
     assert _headlined("codex", [("fiveHour", 100.0), ("weekly", 85.0)]) == "fiveHour"
 
 
+def test_pooled_windows_headline_the_worst_pool():
+    # Antigravity: one 5-hour + weekly pair per model pool.
+    calm = [
+        ("gemini.fiveHour", 12.0),
+        ("gemini.weekly", 28.0),
+        ("3p.fiveHour", 40.0),
+        ("3p.weekly", 49.0),
+    ]
+    # Calm everywhere: the most-used weekly speaks for the provider.
+    assert _headlined("antigravity", calm) == "3p.weekly"
+    # One pool's 5-hour burning takes over, like a single-pool short window.
+    burning = calm[:2] + [("3p.fiveHour", 97.0), ("3p.weekly", 49.0)]
+    assert _headlined("antigravity", burning) == "3p.fiveHour"
+
+
 def test_headline_ties_and_missing_windows():
     # Two short windows warning: higher percent wins.
     assert (

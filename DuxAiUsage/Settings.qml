@@ -54,6 +54,13 @@ PluginSettings {
         defaultValue: true
     }
 
+    ToggleSetting {
+        settingKey: "enableAntigravity"
+        label: "Antigravity"
+        description: "Google AI plan via the agy CLI (5-hour + weekly per model pool)"
+        defaultValue: true
+    }
+
     StyledText {
         width: parent.width
         text: "Thresholds"
