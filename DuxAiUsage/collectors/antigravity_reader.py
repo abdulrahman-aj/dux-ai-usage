@@ -84,6 +84,9 @@ def parse_usage(document):
                     "label": kind[1] + " · " + label,
                     "usedPercent": max(0.0, min(100.0, (1.0 - remaining) * 100.0)),
                     "resetsAt": reset if isinstance(reset, str) and reset else None,
+                    # Detail-only: the third-party pool exhausts almost
+                    # immediately, so it must not drive the pill or alerts.
+                    "detailOnly": key != "gemini",
                 }
             )
         # agy lists weekly first; show 5-hour first like the others.
