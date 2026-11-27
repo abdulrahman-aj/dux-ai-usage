@@ -185,9 +185,7 @@ def compute_events(curr_providers, notified, warn, crit, reset_notify=True):
     # Detail-only rows never alert; dropping them here also forgets any
     # pre-upgrade notified entry for them in the cleanup below.
     for provider_id, windows in curr.items():
-        curr[provider_id] = {
-            wid: w for wid, w in windows.items() if _is_headline(w)
-        }
+        curr[provider_id] = {wid: w for wid, w in windows.items() if _is_headline(w)}
     notified = dict(notified or {})
     events = []
 
