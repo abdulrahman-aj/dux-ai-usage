@@ -56,7 +56,7 @@ def test_recent_claude_is_reused_without_refetch():
     doc = _run_collect(
         [
             "--disable",
-            "codex,opencodeGo",
+            "codex,opencodeGo,antigravity",
             "--prev",
             _prev_snapshot("2026-11-10T20:00:00Z", "2026-11-10T20:00:00Z"),
             "--now",
@@ -106,7 +106,7 @@ def test_stale_claude_is_due_again():
         doc = _run_collect(
             [
                 "--disable",
-                "codex,opencodeGo",
+                "codex,opencodeGo,antigravity",
                 "--prev",
                 _prev_snapshot("2026-11-10T20:00:00Z", "2026-11-10T20:00:00Z"),
                 "--now",
@@ -188,7 +188,7 @@ def test_rate_limited_claude_skips_refetch_within_minimum():
         doc = _run_collect(
             [
                 "--disable",
-                "codex,opencodeGo",
+                "codex,opencodeGo,antigravity",
                 "--prev",
                 _prev_rate_limited("2026-11-10T20:00:00Z", "2026-11-10T20:25:00Z", 0),
                 "--now",
@@ -220,7 +220,7 @@ def test_rate_limited_claude_refetch_due_after_minimum():
         doc = _run_collect(
             [
                 "--disable",
-                "codex,opencodeGo",
+                "codex,opencodeGo,antigravity",
                 "--prev",
                 _prev_rate_limited("2026-11-10T20:00:00Z", "2026-11-10T20:00:00Z", 0),
                 "--now",
@@ -251,7 +251,7 @@ def test_rate_limited_retry_after_hint_extends_wait():
         doc = _run_collect(
             [
                 "--disable",
-                "codex,opencodeGo",
+                "codex,opencodeGo,antigravity",
                 "--prev",
                 _prev_rate_limited(
                     "2026-11-10T20:00:00Z", "2026-11-10T20:15:00Z", 1800
@@ -265,7 +265,7 @@ def test_rate_limited_retry_after_hint_extends_wait():
         doc = _run_collect(
             [
                 "--disable",
-                "codex,opencodeGo",
+                "codex,opencodeGo,antigravity",
                 "--prev",
                 _prev_rate_limited(
                     "2026-11-10T20:00:00Z", "2026-11-10T20:00:00Z", 1800
@@ -294,13 +294,18 @@ def test_chained_polls_retry_after_skip_window():
     restore = _patch_readers(spy)
     try:
         run1 = _run_collect(
-            ["--disable", "codex,opencodeGo", "--now", "2026-11-10T20:00:00Z"]
+            [
+                "--disable",
+                "codex,opencodeGo,antigravity",
+                "--now",
+                "2026-11-10T20:00:00Z",
+            ]
         )
         assert calls == [True] and run1["limited"] == ["claude"]
         run2 = _run_collect(
             [
                 "--disable",
-                "codex,opencodeGo",
+                "codex,opencodeGo,antigravity",
                 "--prev",
                 json.dumps(run1),
                 "--now",
@@ -312,7 +317,7 @@ def test_chained_polls_retry_after_skip_window():
         run3 = _run_collect(
             [
                 "--disable",
-                "codex,opencodeGo",
+                "codex,opencodeGo,antigravity",
                 "--prev",
                 json.dumps(run2),
                 "--now",
@@ -323,7 +328,7 @@ def test_chained_polls_retry_after_skip_window():
         run4 = _run_collect(
             [
                 "--disable",
-                "codex,opencodeGo",
+                "codex,opencodeGo,antigravity",
                 "--prev",
                 json.dumps(run3),
                 "--now",

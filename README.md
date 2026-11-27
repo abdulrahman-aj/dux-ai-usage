@@ -1,8 +1,16 @@
 # dux-ai-usage
 
 Composite Dux shell plugin showing AI subscription usage for **Claude**
-(Claude Code subscription), **Codex** (ChatGPT plan) and **OpenCode Go**
-(single workspace: the key OpenCode already stores).
+(Claude Code subscription), **Codex** (ChatGPT plan), **OpenCode Go**
+(single workspace: the key OpenCode already stores) and **Antigravity**
+(Google AI Pro/Ultra plan, read through the `agy` CLI).
+
+Antigravity needs the standalone `agy` CLI signed in to the Google account
+that holds the plan: run `agy` once and finish the browser login. The
+collector runs `agy -p /usage --output-format json`, so agy keeps owning
+sign-in and token refresh (the CLI /usage panel is the canonical live
+view; the usage-page link opens Antigravity settings at the Models screen). Each model pool (Gemini, Claude and GPT) has its
+own 5-hour and weekly limit; the pill headlines the most-used pool.
 
 Surfaces: bar pill + popout, Dash tab, Dash Overview card, desktop widget,
 settings page, critical/reset notifications. See `DuxAiUsage/plugin.json` for the manifest.
@@ -61,8 +69,8 @@ dms ipc call plugins reload duxAiUsage
 Rules:
 
 - Read-only against every account. Never writes or refreshes credentials
-  itself (spawning `codex app-server` lets Codex refresh its own token
-  file, serialized by its own lock); never prints secrets (run with
+  itself (spawning `codex app-server` or `agy -p /usage` lets that CLI
+  refresh its own token, serialized by its own lock); never prints secrets (run with
   redacted output only).
 - One shared poller: the daemon component polls; pills/cards/tabs read the
   shared snapshot. Polling is gentle (default 5 min, minimum 2 min) with

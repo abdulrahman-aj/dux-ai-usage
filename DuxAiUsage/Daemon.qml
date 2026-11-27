@@ -18,6 +18,7 @@ PluginComponent {
     readonly property bool enableClaude: pluginData.enableClaude ?? true
     readonly property bool enableCodex: pluginData.enableCodex ?? true
     readonly property bool enableGo: pluginData.enableGo ?? true
+    readonly property bool enableAntigravity: pluginData.enableAntigravity ?? true
     readonly property real warnAt: pluginData.warnThreshold ?? 80
     readonly property real critAt: pluginData.critThreshold ?? 100
     readonly property bool notificationsOn: pluginData.toastsEnabled ?? true
@@ -65,6 +66,8 @@ PluginComponent {
             ids.push("codex");
         if (!root.enableGo)
             ids.push("opencodeGo");
+        if (!root.enableAntigravity)
+            ids.push("antigravity");
         return ids;
     }
 

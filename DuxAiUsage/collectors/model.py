@@ -49,10 +49,26 @@ RANK = {"warn": 1, "crit": 2}
 # the warning threshold takes over so a burning 5-hour window is not
 # hidden behind a calm weekly one. Weekly-scoped per-model rows
 # ("weekly-<model>") are detail rows only, never the headline.
-LONG_WINDOW = {"claude": "weekly", "codex": "weekly", "opencodeGo": "monthly"}
+LONG_WINDOW = {
+    "claude": "weekly",
+    "codex": "weekly",
+    "opencodeGo": "monthly",
+    "antigravity": "weekly",
+}
 
 # Short -> long ordering for headline comparison.
 _WINDOW_RANK = {"fiveHour": 0, "rolling": 0, "weekly": 1, "monthly": 2}
+
+
+def window_kind(window_id):
+    """Window kind without its quota pool: "gemini.weekly" -> "weekly".
+
+    Antigravity has one 5-hour + weekly pair per model pool; the other
+    providers have a single pool and plain ids, which pass through.
+    """
+    if isinstance(window_id, str):
+        return window_id.rsplit(".", 1)[-1]
+    return window_id
 
 
 def _window_rank(window_id):
@@ -63,7 +79,7 @@ def _window_rank(window_id):
     weekly so a future window kind cannot hijack the pill.
     """
     if isinstance(window_id, str):
-        return _WINDOW_RANK.get(window_id, 1)
+        return _WINDOW_RANK.get(window_kind(window_id), 1)
     return 1
 
 
@@ -263,7 +279,10 @@ def headline_window(provider, warn, crit):
     if not candidates:
         return None
     long_id = LONG_WINDOW.get(provider.get("id"))
-    long = next((w for w, _ in candidates if w.get("id") == long_id), None)
+    # With several pools (Antigravity) the most-used long window speaks
+    # for the provider; single-pool providers have at most one.
+    longs = [item for item in candidates if window_kind(item[0].get("id")) == long_id]
+    long = max(longs, key=lambda item: item[1])[0] if longs else None
     long_rank = _window_rank(long_id)
     long_level = order.get(level_of(_numeric_percent(long), warn, crit), 0)
 

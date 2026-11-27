@@ -13,6 +13,7 @@ sys.path.insert(
     0, os.path.join(os.path.dirname(__file__), "..", "DuxAiUsage", "collectors")
 )
 
+import antigravity_reader
 import claude_reader
 import codex_reader
 import go_reader
@@ -433,3 +434,139 @@ def test_go_429_carries_retry_after_hint():
     provider = go_reader.fetch(key="dummy", opener=opener)
     assert provider["error"]["kind"] == "rateLimited"
     assert provider["error"]["retryAfter"] == 45
+
+
+# Recorded from `agy -p /usage --output-format json` (descriptions trimmed).
+AGY_USAGE = {
+    "status": "SUCCESS",
+    "command": {
+        "name": "usage",
+        "data": {
+            "groups": [
+                {
+                    "name": "Gemini Models",
+                    "buckets": [
+                        {
+                            "id": "gemini-weekly",
+                            "window": "weekly",
+                            "remaining_fraction": 0.7153853178024292,
+                            "reset_time": "2026-12-03T13:52:33Z",
+                        },
+                        {
+                            "id": "gemini-5h",
+                            "window": "5h",
+                            "remaining_fraction": 0.8615618944168091,
+                            "reset_time": "2026-11-26T23:52:33Z",
+                        },
+                    ],
+                },
+                {
+                    "name": "Claude and GPT models",
+                    "buckets": [
+                        {
+                            "id": "3p-weekly",
+                            "window": "weekly",
+                            "remaining_fraction": 0.5140454769134521,
+                            "reset_time": "2026-12-03T18:59:03Z",
+                        },
+                        {
+                            "id": "3p-5h",
+                            "window": "5h",
+                            "remaining_fraction": 0.0,
+                            "reset_time": "2026-11-26T23:59:03Z",
+                        },
+                    ],
+                },
+            ]
+        },
+    },
+}
+
+
+def test_antigravity_usage_parses_every_pool_as_used_percent():
+    provider = antigravity_reader.fetch(run=lambda: (0, json.dumps(AGY_USAGE)))
+    assert provider["error"] is None
+    by_id = {w["id"]: w for w in provider["windows"]}
+    assert set(by_id) == {
+        "gemini.weekly",
+        "gemini.fiveHour",
+        "3p.weekly",
+        "3p.fiveHour",
+    }
+    # remaining_fraction is converted to used percent.
+    assert by_id["gemini.weekly"]["usedPercent"] == pytest.approx(28.46, abs=0.01)
+    assert by_id["3p.fiveHour"]["usedPercent"] == 100.0
+    assert by_id["3p.fiveHour"]["resetsAt"] == "2026-11-26T23:59:03Z"
+    assert [w["id"] for w in provider["windows"]] == [
+        "gemini.fiveHour",
+        "gemini.weekly",
+        "3p.fiveHour",
+        "3p.weekly",
+    ]
+    assert by_id["gemini.fiveHour"]["label"] == "5-hour · Gemini"
+    assert by_id["3p.weekly"]["label"] == "Weekly · Claude and GPT"
+    assert provider["usageUrl"] == antigravity_reader.USAGE_URL
+
+
+def test_antigravity_unknown_buckets_are_skipped():
+    doc = json.loads(json.dumps(AGY_USAGE))
+    buckets = doc["command"]["data"]["groups"][0]["buckets"]
+    buckets[0]["window"] = "daily"
+    buckets[1]["remaining_fraction"] = None
+    windows = antigravity_reader.parse_usage(doc)
+    assert [w["id"] for w in windows] == ["3p.fiveHour", "3p.weekly"]
+    assert antigravity_reader.parse_usage({"status": "SUCCESS"}) == []
+
+
+def test_antigravity_disabled_bucket_is_skipped_not_exhausted():
+    # Live shape when the weekly pool is exhausted: agy flags the
+    # pool's 5-hour bucket disabled with no reset_time. It must not
+    # surface as a 100% 5-hour window stealing the headline.
+    doc = json.loads(json.dumps(AGY_USAGE))
+    bucket = doc["command"]["data"]["groups"][1]["buckets"][1]
+    bucket["disabled"] = True
+    del bucket["reset_time"]
+    windows = antigravity_reader.parse_usage(doc)
+    assert [w["id"] for w in windows] == [
+        "gemini.fiveHour",
+        "gemini.weekly",
+        "3p.weekly",
+    ]
+
+
+def _agy_raises(error):
+    def run():
+        raise error
+
+    return run
+
+
+@pytest.mark.parametrize(
+    "run, kind",
+    [
+        (_agy_raises(FileNotFoundError()), "missing"),
+        (_agy_raises(antigravity_reader.AuthError()), "auth"),
+        # agy exits 2 on a GEMINI_API_KEY, which has no plan quota.
+        (lambda: (2, ""), "auth"),
+        (lambda: (1, ""), "unavailable"),
+        (lambda: (0, "not json"), "unavailable"),
+        (lambda: (0, json.dumps({"status": "SUCCESS"})), "unavailable"),
+        (_agy_raises(TimeoutError()), "unavailable"),
+    ],
+)
+def test_antigravity_error_mapping(run, kind):
+    provider = antigravity_reader.fetch(run=run)
+    assert provider["error"]["kind"] == kind
+    assert provider["windows"] == []
+
+
+def test_antigravity_signed_out_timeout_is_auth(monkeypatch):
+    # Signed out, agy blocks on an OAuth prompt until our timeout.
+    def fake_run(*args, **kwargs):
+        raise antigravity_reader.subprocess.TimeoutExpired(
+            "agy", 10, output=b"Authentication required. Please visit the URL"
+        )
+
+    monkeypatch.setattr(antigravity_reader.shutil, "which", lambda *a, **k: "agy")
+    monkeypatch.setattr(antigravity_reader.subprocess, "run", fake_run)
+    assert antigravity_reader.fetch()["error"]["kind"] == "auth"

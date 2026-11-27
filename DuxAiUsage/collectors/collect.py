@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Poll Claude, Codex and OpenCode Go and print one normalized JSON document.
+"""Poll Claude, Codex, OpenCode Go and Antigravity and print one normalized JSON document.
 
 Read-only against every account: credential files and opencode.db are
 opened read-only, tokens are never refreshed or printed, and failures
@@ -20,6 +20,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import antigravity_reader
 import claude_reader
 import codex_reader
 import go_reader
@@ -33,12 +34,14 @@ from model import (
     merge_rate_limited,
     seed_notified,
     visible_windows,
+    window_kind,
 )
 
 READERS = (
     ("claude", claude_reader.fetch),
     ("codex", codex_reader.fetch),
     ("opencodeGo", go_reader.fetch),
+    ("antigravity", antigravity_reader.fetch),
 )
 
 
@@ -175,8 +178,8 @@ def main(argv=None):
         provider["windows"] = visible_windows(provider)
         headline = headline_window(provider, warn, crit)
         provider["headlineId"] = headline.get("id") if headline else None
-        provider["headlineShort"] = bool(headline) and headline.get(
-            "id"
+        provider["headlineShort"] = bool(headline) and window_kind(
+            headline.get("id")
         ) != LONG_WINDOW.get(provider.get("id"))
     events, new_notified = compute_events(
         merged,

@@ -1,7 +1,7 @@
 {
     "id": "duxAiUsage",
     "name": "AI Usage",
-    "description": "Claude, Codex and OpenCode Go subscription usage: bar pill, dash tab, overview card and desktop widget",
+    "description": "Claude, Codex, OpenCode Go and Antigravity subscription usage: bar pill, dash tab, overview card and desktop widget",
     "version": "0.1.0",
     "author": "abdulrahman-aj",
     "type": "composite",
