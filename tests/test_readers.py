@@ -505,6 +505,7 @@ def test_antigravity_usage_parses_every_pool_as_used_percent():
     ]
     assert by_id["gemini.fiveHour"]["label"] == "5-hour · Gemini"
     assert by_id["3p.weekly"]["label"] == "Weekly · Claude and GPT"
+    assert provider["usageUrl"] == antigravity_reader.USAGE_URL
 
 
 def test_antigravity_unknown_buckets_are_skipped():

@@ -8,7 +8,8 @@ Composite Dux shell plugin showing AI subscription usage for **Claude**
 Antigravity needs the standalone `agy` CLI signed in to the Google account
 that holds the plan: run `agy` once and finish the browser login. The
 collector runs `agy -p /usage --output-format json`, so agy keeps owning
-sign-in and token refresh. Each model pool (Gemini, Claude and GPT) has its
+sign-in and token refresh (the CLI /usage panel is the canonical live
+view; the usage-page link opens Antigravity settings at the Models screen). Each model pool (Gemini, Claude and GPT) has its
 own 5-hour and weekly limit; the pill headlines the most-used pool.
 
 Surfaces: bar pill + popout, Dash tab, Dash Overview card, desktop widget,

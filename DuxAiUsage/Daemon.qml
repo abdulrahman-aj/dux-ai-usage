@@ -195,8 +195,8 @@ PluginComponent {
                 body = "Fresh quota window started.";
             }
             var icon = (pluginService?.getPluginPath(pluginId) ?? "") + "/assets/" + shared.logoName(event.providerId) + ".svg";
-            // Antigravity has no web usage page (usageUrl null), so its
-            // action would silently no-op in openUsagePage: only offer
+            // Providers without a web usage page get no open action:
+            // openUsagePage no-ops on an empty usageUrl, so only offer
             // the button when there is somewhere to open.
             var usageUrl = "";
             var providers = root.snapshot?.providers ?? [];
