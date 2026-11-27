@@ -21,7 +21,9 @@ from codex_reader import runtime_env
 TIMEOUT_SECONDS = 10
 # Antigravity settings, opened at the Models screen (plan + model
 # quota live here; the CLI /usage panel stays the canonical numbers).
-USAGE_URL = "https://antigravity.google.com/remote?settingsOpen=true&settingsScreen=Models"
+USAGE_URL = (
+    "https://antigravity.google.com/remote?settingsOpen=true&settingsScreen=Models"
+)
 
 # bucket "window" -> (window kind, label)
 KINDS = {"5h": ("fiveHour", "5-hour"), "weekly": ("weekly", "Weekly")}
