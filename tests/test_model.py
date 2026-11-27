@@ -238,6 +238,12 @@ def test_detail_only_windows_never_fire_events():
     ]
     events, notified = compute_events(providers, {}, 80, 100)
     assert events == [] and notified == {}
+    # A pre-upgrade alert for a now-detail-only row is forgotten
+    # silently: no spurious reset event on the way out.
+    events, notified = compute_events(
+        providers, {"antigravity/3p.weekly": "crit"}, 80, 100
+    )
+    assert events == [] and notified == {}
 
 
 def test_headline_ties_and_missing_windows():

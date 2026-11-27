@@ -23,7 +23,8 @@ provider::
 headlineId names the window the pill and cards headline (see
 headline_window); headlineShort marks a short window taking over the
 long default, so surfaces can show the tiny window mark without
-reimplementing the rule. staleSince is the fetch the last-known values came
+reimplementing the rule. A window may carry "headline": False to stay
+detail-only: shown in the card, but never headlined and never alerted. staleSince is the fetch the last-known values came
 from, so the stale tag shows only for kept values, with its age.
 updatedAt is the provider's own last successful fetch (ISO): surfaces
 show each card's own "Updated ... ago" from it instead of one global
