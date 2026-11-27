@@ -189,9 +189,8 @@ def test_short_warn_never_hides_long_crit():
 
 
 def test_pooled_windows_headline_the_gemini_pool():
-    # Antigravity: one 5-hour + weekly pair per model pool; the
-    # third-party pool is detail-only, so the pill follows Gemini even
-    # when the shared allowance is the most-used window overall.
+    # The shared allowance may be the most-used window; the pill still
+    # follows Gemini.
     calm = [
         ("gemini.fiveHour", 12.0, False),
         ("gemini.weekly", 28.0, False),
@@ -199,7 +198,7 @@ def test_pooled_windows_headline_the_gemini_pool():
         ("3p.weekly", 49.0, True),
     ]
     assert _headlined("antigravity", calm) == "gemini.weekly"
-    # A burning Gemini 5-hour takes over, like a single-pool short window.
+    # A burning third-party pool doesn't steal the headline.
     burning = calm[:2] + [("3p.fiveHour", 97.0, True), ("3p.weekly", 49.0, True)]
     assert _headlined("antigravity", burning) == "gemini.weekly"
     hot = [
@@ -215,8 +214,6 @@ def test_pooled_windows_headline_the_gemini_pool():
 
 
 def test_detail_only_windows_never_fire_events():
-    from model import compute_events
-
     providers = [
         {
             "id": "antigravity",
